@@ -1,5 +1,5 @@
 """
-Aplicación mejorada de Control de Tablillas con parser robusto
+Aplicación con Parser Avanzado para PDFs Extremadamente Complejos
 """
 
 import streamlit as st
@@ -12,12 +12,12 @@ import io
 from datetime import datetime, timedelta
 import re
 import numpy as np
-from enhanced_pdf_parser import EnhancedAlsinaPDFParser
+from advanced_pdf_parser import AdvancedAlsinaPDFParser
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Control de Tablillas - Alsina Forms (Mejorado)",
-    page_icon="📊",
+    page_title="Control de Tablillas - Alsina Forms (Parser Avanzado)",
+    page_icon="🚀",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -51,21 +51,31 @@ st.markdown("""
     .alert-danger { background: #f8d7da; padding: 0.75rem; border-radius: 0.375rem; }
     
     .parser-info {
-        background: #e3f2fd;
-        border-left: 4px solid #2196f3;
+        background: #e8f5e8;
+        border-left: 4px solid #28a745;
         padding: 1rem;
         margin: 1rem 0;
+    }
+    
+    .tech-badge {
+        background: #007bff;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin: 0.1rem;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
 
-class ImprovedTablillasController:
-    """Controlador mejorado con parser robusto"""
+class AdvancedTablillasController:
+    """Controlador con parser avanzado"""
     
     def __init__(self):
         self.data_file = "tablillas_history.json"
         self.config_file = "config.json"
-        self.pdf_parser = EnhancedAlsinaPDFParser()
+        self.pdf_parser = AdvancedAlsinaPDFParser()
         self.load_history()
         self.load_config()
     
@@ -127,19 +137,9 @@ class ImprovedTablillasController:
             return data
     
     def extract_pdf_data(self, pdf_file):
-        """Extraer datos del PDF usando el parser mejorado"""
+        """Extraer datos del PDF usando el parser avanzado"""
         try:
-            st.info("🔄 **Usando Parser Mejorado** - Detecta automáticamente tablas y maneja headers divididos")
-            
-            with st.spinner('🔄 Procesando PDF con parser robusto...'):
-                df = self.pdf_parser.parse_pdf_file(pdf_file)
-            
-            if df is not None and not df.empty:
-                st.success(f"✅ **Extracción exitosa**: {len(df)} registros procesados")
-                return df
-            else:
-                st.error("❌ No se pudieron extraer datos válidos del PDF")
-                return None
+            return self.pdf_parser.parse_pdf_file(pdf_file)
                 
         except Exception as e:
             st.error(f"Error al procesar PDF: {str(e)}")
@@ -200,25 +200,31 @@ class ImprovedTablillasController:
         return df.sort_values('Priority_Score', ascending=False)
 
 def main():
-    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co. (Mejorado)</h1></div>', 
+    st.markdown('<div class="main-header"><h1>🚀 Control de Tablillas - Alsina Forms (Parser Avanzado)</h1></div>', 
                 unsafe_allow_html=True)
     
-    # Información sobre el parser mejorado
+    # Información sobre el parser avanzado
     st.markdown("""
     <div class="parser-info">
-    <h4>🚀 <strong>Parser Mejorado Activo</strong></h4>
-    <p>Esta versión incluye mejoras significativas para la extracción de datos:</p>
+    <h4>🚀 <strong>Parser Avanzado Activo</strong></h4>
+    <p>Esta versión usa múltiples bibliotecas especializadas para PDFs extremadamente complejos:</p>
+    <div>
+        <span class="tech-badge">Camelot</span>
+        <span class="tech-badge">Tabula</span>
+        <span class="tech-badge">PyMuPDF</span>
+        <span class="tech-badge">PDFPlumber</span>
+    </div>
+    <p><strong>Específicamente diseñado para:</strong></p>
     <ul>
-        <li>✅ <strong>Detección automática de tablas</strong> en PDFs</li>
-        <li>✅ <strong>Manejo de headers divididos</strong> en múltiples líneas</li>
-        <li>✅ <strong>Procesamiento de columnas duplicadas</strong></li>
-        <li>✅ <strong>Extracción robusta de datos mixtos</strong> (fechas, números, texto)</li>
-        <li>✅ <strong>Validación automática</strong> de registros</li>
+        <li>✅ <strong>Headers extremadamente divididos</strong> (Ye s, Def initi ve De v)</li>
+        <li>✅ <strong>Espaciado inconsistente</strong> entre campos</li>
+        <li>✅ <strong>Datos que se extienden a múltiples líneas</strong></li>
+        <li>✅ <strong>Tablas complejas con formato irregular</strong></li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
     
-    controller = ImprovedTablillasController()
+    controller = AdvancedTablillasController()
     
     # Sidebar
     st.sidebar.header("📂 Carga de Datos")
@@ -234,7 +240,7 @@ def main():
     st.sidebar.header("📊 Navegación")
     page = st.sidebar.selectbox(
         "Seleccionar Vista",
-        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos", "Configuración"]
+        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos", "Debug del Parser"]
     )
     
     if uploaded_file is not None:
@@ -265,17 +271,17 @@ def main():
                 show_detailed_analysis(df_prioritized)
             elif page == "Verificación de Datos":
                 show_data_verification(df_prioritized)
-            elif page == "Configuración":
-                show_configuration()
+            elif page == "Debug del Parser":
+                show_parser_debug(df_prioritized)
         else:
-            if page == "Configuración":
-                show_configuration()
+            if page == "Debug del Parser":
+                show_parser_debug(None)
             else:
                 st.error("❌ No se pudieron extraer datos válidos del PDF")
                 st.info("💡 Verifica que el PDF contenga el formato correcto de Alsina Forms")
     else:
-        if page == "Configuración":
-            show_configuration()
+        if page == "Debug del Parser":
+            show_parser_debug(None)
         else:
             st.info("👆 Sube un archivo PDF para comenzar el análisis")
 
@@ -343,7 +349,7 @@ def show_main_dashboard(df, controller):
     
     # Botón de descarga
     current_date = datetime.now().strftime('%Y%m%d_%H%M')
-    filename = f"tablillas_mejorado_{current_date}.xlsx"
+    filename = f"tablillas_avanzado_{current_date}.xlsx"
     
     if st.button("📥 Descargar Reporte Excel", type="primary"):
         download_excel(df, filename)
@@ -395,7 +401,7 @@ def show_data_verification(df):
     
     st.markdown("""
     <div class="alert-success">
-    <strong>✅ Verificación de Extracción</strong><br>
+    <strong>✅ Verificación de Extracción Avanzada</strong><br>
     Revisa los datos extraídos para asegurar que la información sea correcta.
     </div>
     """, unsafe_allow_html=True)
@@ -457,21 +463,77 @@ def show_data_verification(df):
     else:
         st.warning("⚠️ No se encontraron columnas esperadas en los datos")
 
-def show_configuration():
-    """Mostrar configuración"""
-    st.header("⚙️ Configuración")
-    st.info("Configuración de pesos de prioridad y umbrales de alerta")
+def show_parser_debug(df):
+    """Mostrar información de debug del parser"""
+    st.header("🔧 Debug del Parser Avanzado")
     
     st.markdown("""
-    **Parámetros actuales del sistema:**
+    <div class="alert-warning">
+    <strong>🔧 Información de Debug</strong><br>
+    Esta página muestra información técnica sobre el proceso de extracción.
+    </div>
+    """, unsafe_allow_html=True)
     
-    - **Prioridad Alta:** Devoluciones con 25+ días o score alto
-    - **Prioridad Media:** Devoluciones con 15-24 días  
-    - **Prioridad Baja:** Devoluciones con menos de 15 días
+    # Información sobre bibliotecas disponibles
+    st.subheader("📚 Bibliotecas Disponibles")
     
-    **Tablillas Estancadas:** Sin progreso por más de 10 días
-    **Devoluciones Críticas:** Más de 30 días en el sistema
-    """)
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        try:
+            import camelot
+            st.success("✅ Camelot")
+        except ImportError:
+            st.error("❌ Camelot")
+    
+    with col2:
+        try:
+            import tabula
+            st.success("✅ Tabula")
+        except ImportError:
+            st.error("❌ Tabula")
+    
+    with col3:
+        try:
+            import fitz
+            st.success("✅ PyMuPDF")
+        except ImportError:
+            st.error("❌ PyMuPDF")
+    
+    with col4:
+        try:
+            import pdfplumber
+            st.success("✅ PDFPlumber")
+        except ImportError:
+            st.error("❌ PDFPlumber")
+    
+    # Información sobre el PDF procesado
+    if df is not None and not df.empty:
+        st.subheader("📊 Información del PDF Procesado")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write(f"**Total de registros:** {len(df)}")
+            st.write(f"**Columnas extraídas:** {len(df.columns)}")
+            st.write(f"**Registros completos:** {len(df.dropna(subset=['Customer_Name', 'Return_Packing_Slip']))}")
+        
+        with col2:
+            if 'WH_Code' in df.columns:
+                warehouses = df['WH_Code'].unique()
+                st.write(f"**Almacenes encontrados:** {len(warehouses)}")
+                st.write(f"**Almacenes:** {', '.join(warehouses)}")
+            
+            if 'Definitive_Dev' in df.columns:
+                definitive_yes = len(df[df['Definitive_Dev'] == 'Yes'])
+                st.write(f"**Devoluciones definitivas:** {definitive_yes}")
+        
+        # Mostrar muestra de datos para debug
+        st.subheader("🔍 Muestra de Datos para Debug")
+        st.dataframe(df.head(10), use_container_width=True)
+        
+    else:
+        st.info("👆 Sube un PDF para ver información de debug")
 
 def download_excel(df, filename):
     """Generar archivo Excel con formato mejorado"""
