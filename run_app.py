@@ -93,26 +93,15 @@ def create_initial_config():
 def run_streamlit_app():
     """Ejecutar la aplicación Streamlit"""
     try:
-        # Obtener la ruta del archivo principal
-        main_app = os.path.join(os.path.dirname(__file__), "app.py")
-        
-        if not os.path.exists(main_app):
-            print("❌ No se encuentra el archivo app.py")
-            print("💡 Asegúrate de que todos los archivos estén en el mismo directorio")
-            return False
-        
-        # Ejecutar Streamlit
+        # Importar y ejecutar directamente la aplicación
         print("🚀 Iniciando aplicación...")
         print("📱 La aplicación se abrirá en tu navegador web")
         print("🌐 URL local: http://localhost:8501")
         print("\n⏹️  Para detener la aplicación presiona Ctrl+C")
         
-        subprocess.run([
-            sys.executable, "-m", "streamlit", "run", main_app,
-            "--server.port=8501",
-            "--server.headless=false",
-            "--browser.gatherUsageStats=false"
-        ])
+        # Importar y ejecutar la aplicación directamente
+        from app import main
+        main()
         
         return True
         
