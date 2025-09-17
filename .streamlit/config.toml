@@ -1,0 +1,30 @@
+[server]
+# Configuración del servidor
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[logger]
+# Configuración de logs
+level = "error"
+
+[client]
+# Configuración del cliente
+showErrorDetails = false
+
+[runner]
+# Configuración del runner
+fastReruns = true
+enforceSerializableSessionState = false
+
+[theme]
+# Configuración del tema
+primaryColor = "#1f4e79"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[fileWatcher]
+# Deshabilitar el file watcher para evitar errores de inotify
+usePolling = true

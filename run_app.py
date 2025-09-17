@@ -47,9 +47,16 @@ def setup_directories():
     directories = ['data', 'exports', 'logs']
     
     for directory in directories:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-            print(f"📁 Directorio creado: {directory}")
+        try:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                print(f"📁 Directorio creado: {directory}")
+            else:
+                print(f"📁 Directorio ya existe: {directory}")
+        except FileExistsError:
+            print(f"📁 Directorio ya existe: {directory}")
+        except Exception as e:
+            print(f"⚠️ No se pudo crear directorio {directory}: {str(e)}")
 
 def create_initial_config():
     """Crear archivo de configuración inicial"""
