@@ -24,7 +24,3 @@ primaryColor = "#1f4e79"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
-
-[fileWatcher]
-# Deshabilitar el file watcher para evitar errores de inotify
-usePolling = true
