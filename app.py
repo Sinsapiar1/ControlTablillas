@@ -88,7 +88,7 @@ class AlsinaPDFParser:
             
             # Mostrar las primeras 10 líneas para debug
             if i < 10:
-                st.write(f"Línea {i+1}: `{line[:100]}{'...' if len(line) > 100 else ''}`")
+                st.write(f"Línea {i+1}: `{line}`")
             
             # Detectar inicio de sección de datos
             if 'FL' in line and any(char.isdigit() for char in line):
@@ -132,14 +132,18 @@ class AlsinaPDFParser:
     def _extract_with_perfect_regex(self, line: str, line_number: int) -> Optional[Dict]:
         """Extraer campos usando regex perfecto para el formato específico"""
         
-        # Patrón regex que coincide exactamente con el formato
-        pattern = r'FL\s+(\w+)\s+(\d{12})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+(\w+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(.+?)\s+(Yes|No)\s+(\d{1,2}/\d{1,2}/\d{4})?\s*(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)'
+        st.write(f"🔍 **Analizando línea {line_number}:** `{line}`")
+        
+        # Patrón más flexible basado en el formato real observado
+        # FL 61D 729000018669 9/2/2025 40037739 FL053 8/31/2025 9/30/2025 3c Construction Corp Biscayne Bay Co...
+        pattern = r'FL\s+(\w+)\s+(\d{12})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+(\w+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(.+?)(?:\s+(Yes|No))?(?:\s+(\d{1,2}/\d{1,2}/\d{4}))?(?:\s+(.+?))?(?:\s+(\d+))?(?:\s+(\d+))?(?:\s+(\d+))?(?:\s+(\d+))?$'
         
         match = re.search(pattern, line)
         
         if not match:
             st.write(f"⚠️ Línea {line_number}: No coincide con el patrón")
-            return None
+            # Intentar con patrón más simple
+            return self._extract_with_simple_parsing(line, line_number)
         
         # Extraer grupos
         groups = match.groups()
@@ -152,24 +156,24 @@ class AlsinaPDFParser:
         invoice_start = self._parse_date(groups[5])
         invoice_end = self._parse_date(groups[6])
         
-        # Extraer nombres (grupo 7 contiene todo el texto entre fechas y Yes/No)
-        names_text = groups[7]
+        # Extraer nombres (grupo 7 contiene todo el texto restante)
+        names_text = groups[7] if groups[7] else ""
         customer_name, job_site_name = self._split_names_perfect(names_text)
         
-        definitive_dev = groups[8]
+        definitive_dev = groups[8] if groups[8] else "No"
         counted_date = self._parse_date(groups[9]) if groups[9] else None
         
         # Extraer información de tablillas (grupo 10)
-        tablets_text = groups[10]
+        tablets_text = groups[10] if groups[10] else ""
         tablets_info = self._extract_tablets_perfect(tablets_text)
         
-        # Totales
-        total_tablets = int(groups[11])
-        total_open = int(groups[12])
-        counting_delay = int(groups[13])
-        validation_delay = int(groups[14])
+        # Totales (valores por defecto si no están presentes)
+        total_tablets = int(groups[11]) if groups[11] else 0
+        total_open = int(groups[12]) if groups[12] else 0
+        counting_delay = int(groups[13]) if groups[13] else 0
+        validation_delay = int(groups[14]) if groups[14] else 0
         
-        return {
+        result = {
             'WH': 'FL',
             'WH_Code': wh_code,
             'Return_Packing_Slip': return_slip,
@@ -189,6 +193,53 @@ class AlsinaPDFParser:
             'Counting_Delay': counting_delay,
             'Validation_Delay': validation_delay
         }
+        
+        st.write(f"✅ **Línea {line_number} parseada:** {customer_name} - {job_site_name}")
+        return result
+    
+    def _extract_with_simple_parsing(self, line: str, line_number: int) -> Optional[Dict]:
+        """Método de respaldo para parsing simple cuando el regex falla"""
+        try:
+            parts = line.split()
+            if len(parts) < 8:
+                return None
+            
+            # Extraer campos básicos
+            wh_code = parts[1] if len(parts) > 1 else "Unknown"
+            return_slip = parts[2] if len(parts) > 2 else "Unknown"
+            return_date = self._parse_date(parts[3]) if len(parts) > 3 else None
+            jobsite_id = parts[4] if len(parts) > 4 else "Unknown"
+            cost_center = parts[5] if len(parts) > 5 else "Unknown"
+            invoice_start = self._parse_date(parts[6]) if len(parts) > 6 else None
+            invoice_end = self._parse_date(parts[7]) if len(parts) > 7 else None
+            
+            # Extraer nombres del resto de la línea
+            names_text = " ".join(parts[8:]) if len(parts) > 8 else ""
+            customer_name, job_site_name = self._split_names_perfect(names_text)
+            
+            return {
+                'WH': 'FL',
+                'WH_Code': wh_code,
+                'Return_Packing_Slip': return_slip,
+                'Return_Date': return_date,
+                'Jobsite_ID': jobsite_id,
+                'Cost_Center': cost_center,
+                'Invoice_Start_Date': invoice_start,
+                'Invoice_End_Date': invoice_end,
+                'Customer_Name': customer_name,
+                'Job_Site_Name': job_site_name,
+                'Definitive_Dev': "No",
+                'Counted_Date': None,
+                'Tablets': "",
+                'Total_Tablets': 0,
+                'Open_Tablets': "",
+                'Total_Open': 0,
+                'Counting_Delay': 0,
+                'Validation_Delay': 0
+            }
+        except Exception as e:
+            st.write(f"❌ Error en parsing simple línea {line_number}: {str(e)}")
+            return None
     
     def _split_names_perfect(self, names_text: str) -> Tuple[str, str]:
         """Dividir nombres de manera perfecta basándose en el formato real"""
