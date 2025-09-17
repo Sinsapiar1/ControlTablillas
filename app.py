@@ -1,5 +1,5 @@
 """
-Aplicación con Parser Ultra-Preciso para el Formato Exacto de Alsina Forms
+Aplicación simple y robusta usando Camelot-py para extraer tablas de PDFs
 """
 
 import streamlit as st
@@ -12,12 +12,12 @@ import io
 from datetime import datetime, timedelta
 import re
 import numpy as np
-from ultra_precise_parser import UltraPreciseAlsinaParser
+from camelot_parser import CamelotAlsinaParser
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Control de Tablillas - Alsina Forms (Ultra-Preciso)",
-    page_icon="🎯",
+    page_title="Control de Tablillas - Alsina Forms (Camelot)",
+    page_icon="🐪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -57,7 +57,7 @@ st.markdown("""
         margin: 1rem 0;
     }
     
-    .precision-badge {
+    .camelot-badge {
         background: #28a745;
         color: white;
         padding: 0.25rem 0.5rem;
@@ -69,13 +69,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-class UltraPreciseTablillasController:
-    """Controlador con parser ultra-preciso"""
+class CamelotTablillasController:
+    """Controlador usando Camelot"""
     
     def __init__(self):
         self.data_file = "tablillas_history.json"
         self.config_file = "config.json"
-        self.pdf_parser = UltraPreciseAlsinaParser()
+        self.pdf_parser = CamelotAlsinaParser()
         self.load_history()
         self.load_config()
     
@@ -137,7 +137,7 @@ class UltraPreciseTablillasController:
             return data
     
     def extract_pdf_data(self, pdf_file):
-        """Extraer datos del PDF usando el parser ultra-preciso"""
+        """Extraer datos del PDF usando Camelot"""
         try:
             return self.pdf_parser.parse_pdf_file(pdf_file)
                 
@@ -200,32 +200,32 @@ class UltraPreciseTablillasController:
         return df.sort_values('Priority_Score', ascending=False)
 
 def main():
-    st.markdown('<div class="main-header"><h1>🎯 Control de Tablillas - Alsina Forms (Ultra-Preciso)</h1></div>', 
+    st.markdown('<div class="main-header"><h1>🐪 Control de Tablillas - Alsina Forms (Camelot)</h1></div>', 
                 unsafe_allow_html=True)
     
-    # Información sobre el parser ultra-preciso
+    # Información sobre Camelot
     st.markdown("""
     <div class="parser-info">
-    <h4>🎯 <strong>Parser Ultra-Preciso Activo</strong></h4>
-    <p>Esta versión está diseñada específicamente para el formato exacto de Alsina Forms:</p>
+    <h4>🐪 <strong>Parser Camelot Activo</strong></h4>
+    <p>Esta versión usa Camelot-py, la biblioteca más robusta para extracción de tablas de PDFs:</p>
     <div>
-        <span class="precision-badge">Análisis Detallado</span>
-        <span class="precision-badge">Formato Específico</span>
-        <span class="precision-badge">Precisión Absoluta</span>
-        <span class="precision-badge">Validación Completa</span>
+        <span class="camelot-badge">Camelot-py</span>
+        <span class="camelot-badge">Lattice</span>
+        <span class="camelot-badge">Stream</span>
+        <span class="camelot-badge">Robusto</span>
     </div>
-    <p><strong>Problemas específicos resueltos:</strong></p>
+    <p><strong>Características:</strong></p>
     <ul>
-        <li>✅ <strong>Nombres de cliente y sitio correctos</strong> (sin "Unknown Customer")</li>
-        <li>✅ <strong>Tablillas extraídas correctamente</strong> (sin fechas ni direcciones)</li>
-        <li>✅ <strong>Fechas de conteo preservadas</strong> (cuando están presentes)</li>
-        <li>✅ <strong>Estados definitivos correctos</strong> (Yes/No según el PDF)</li>
-        <li>✅ <strong>Espaciado inconsistente manejado</strong> (múltiples espacios)</li>
+        <li>✅ <strong>Detección automática de tablas</strong> con bordes (Lattice)</li>
+        <li>✅ <strong>Extracción de tablas sin bordes</strong> (Stream)</li>
+        <li>✅ <strong>Manejo de headers complejos</strong> divididos en múltiples filas</li>
+        <li>✅ <strong>Procesamiento robusto</strong> de datos mixtos</li>
+        <li>✅ <strong>Múltiples estrategias</strong> de extracción</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
     
-    controller = UltraPreciseTablillasController()
+    controller = CamelotTablillasController()
     
     # Sidebar
     st.sidebar.header("📂 Carga de Datos")
@@ -241,7 +241,7 @@ def main():
     st.sidebar.header("📊 Navegación")
     page = st.sidebar.selectbox(
         "Seleccionar Vista",
-        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos", "Comparación con Excel"]
+        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos", "Debug Camelot"]
     )
     
     if uploaded_file is not None:
@@ -272,17 +272,17 @@ def main():
                 show_detailed_analysis(df_prioritized)
             elif page == "Verificación de Datos":
                 show_data_verification(df_prioritized)
-            elif page == "Comparación con Excel":
-                show_excel_comparison(df_prioritized)
+            elif page == "Debug Camelot":
+                show_camelot_debug(df_prioritized)
         else:
-            if page == "Comparación con Excel":
-                show_excel_comparison(None)
+            if page == "Debug Camelot":
+                show_camelot_debug(None)
             else:
                 st.error("❌ No se pudieron extraer datos válidos del PDF")
-                st.info("💡 Verifica que el PDF contenga el formato correcto de Alsina Forms")
+                st.info("💡 Verifica que el PDF contenga tablas extraíbles")
     else:
-        if page == "Comparación con Excel":
-            show_excel_comparison(None)
+        if page == "Debug Camelot":
+            show_camelot_debug(None)
         else:
             st.info("👆 Sube un archivo PDF para comenzar el análisis")
 
@@ -350,7 +350,7 @@ def show_main_dashboard(df, controller):
     
     # Botón de descarga
     current_date = datetime.now().strftime('%Y%m%d_%H%M')
-    filename = f"tablillas_ultra_preciso_{current_date}.xlsx"
+    filename = f"tablillas_camelot_{current_date}.xlsx"
     
     if st.button("📥 Descargar Reporte Excel", type="primary"):
         download_excel(df, filename)
@@ -402,7 +402,7 @@ def show_data_verification(df):
     
     st.markdown("""
     <div class="alert-success">
-    <strong>✅ Verificación de Extracción Ultra-Precisa</strong><br>
+    <strong>✅ Verificación de Extracción con Camelot</strong><br>
     Revisa los datos extraídos para asegurar que la información sea correcta.
     </div>
     """, unsafe_allow_html=True)
@@ -464,87 +464,61 @@ def show_data_verification(df):
     else:
         st.warning("⚠️ No se encontraron columnas esperadas en los datos")
 
-def show_excel_comparison(df):
-    """Mostrar comparación con el Excel esperado"""
-    st.header("📊 Comparación con Excel Esperado")
+def show_camelot_debug(df):
+    """Mostrar información de debug de Camelot"""
+    st.header("🐪 Debug de Camelot")
     
     st.markdown("""
     <div class="alert-warning">
-    <strong>📊 Comparación de Resultados</strong><br>
-    Esta sección muestra cómo los datos extraídos se comparan con el Excel esperado.
+    <strong>🐪 Información de Debug de Camelot</strong><br>
+    Esta página muestra información técnica sobre el proceso de extracción con Camelot.
     </div>
     """, unsafe_allow_html=True)
     
+    # Información sobre Camelot
+    st.subheader("📚 Información de Camelot")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Métodos de Extracción:**")
+        st.write("• **Lattice**: Para tablas con bordes claros")
+        st.write("• **Stream**: Para tablas sin bordes claros")
+        st.write("• **Lattice específico**: Con parámetros optimizados")
+    
+    with col2:
+        st.write("**Características:**")
+        st.write("• Detección automática de tablas")
+        st.write("• Manejo de headers complejos")
+        st.write("• Procesamiento robusto de datos")
+    
+    # Información sobre el PDF procesado
     if df is not None and not df.empty:
-        # Mostrar algunos registros para comparar
-        st.subheader("🔍 Muestra de Registros Extraídos")
+        st.subheader("📊 Información del PDF Procesado")
         
-        # Seleccionar registros específicos para comparar
-        sample_records = df.head(10)
-        
-        display_cols = [
-            'WH_Code', 'Return_Packing_Slip', 'Customer_Name', 'Job_Site_Name',
-            'Definitive_Dev', 'Counted_Date', 'Tablets', 'Total_Tablets',
-            'Open_Tablets', 'Total_Open', 'Counting_Delay', 'Validation_Delay'
-        ]
-        
-        available_cols = [col for col in display_cols if col in sample_records.columns]
-        st.dataframe(sample_records[available_cols], use_container_width=True)
-        
-        # Análisis de calidad
-        st.subheader("📈 Análisis de Calidad de Extracción")
-        
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
-            # Verificar nombres de cliente
-            unknown_customers = len(df[df['Customer_Name'] == 'Unknown Customer'])
-            total_customers = len(df)
-            accuracy = ((total_customers - unknown_customers) / total_customers) * 100
-            st.metric("Precisión Nombres Cliente", f"{accuracy:.1f}%", f"{unknown_customers} desconocidos")
+            st.write(f"**Total de registros:** {len(df)}")
+            st.write(f"**Columnas extraídas:** {len(df.columns)}")
+            st.write(f"**Registros completos:** {len(df.dropna(subset=['Customer_Name', 'Return_Packing_Slip']))}")
         
         with col2:
-            # Verificar tablillas
-            empty_tablets = len(df[df['Tablets'] == ''])
-            total_tablets = len(df)
-            tablet_accuracy = ((total_tablets - empty_tablets) / total_tablets) * 100
-            st.metric("Precisión Tablillas", f"{tablet_accuracy:.1f}%", f"{empty_tablets} vacías")
+            if 'WH_Code' in df.columns:
+                warehouses = df['WH_Code'].unique()
+                st.write(f"**Almacenes encontrados:** {len(warehouses)}")
+                st.write(f"**Almacenes:** {', '.join(warehouses)}")
+            
+            if 'Definitive_Dev' in df.columns:
+                definitive_yes = len(df[df['Definitive_Dev'] == 'Yes'])
+                st.write(f"**Devoluciones definitivas:** {definitive_yes}")
         
-        with col3:
-            # Verificar fechas de conteo
-            if 'Counted_Date' in df.columns:
-                counted_dates = len(df[df['Counted_Date'].notna()])
-                total_dates = len(df)
-                date_accuracy = (counted_dates / total_dates) * 100
-                st.metric("Fechas de Conteo", f"{date_accuracy:.1f}%", f"{counted_dates} encontradas")
-        
-        # Mostrar problemas específicos
-        st.subheader("⚠️ Problemas Identificados")
-        
-        problems = []
-        
-        # Verificar nombres desconocidos
-        if unknown_customers > 0:
-            problems.append(f"❌ {unknown_customers} registros con 'Unknown Customer'")
-        
-        # Verificar tablillas vacías
-        if empty_tablets > 0:
-            problems.append(f"❌ {empty_tablets} registros con tablillas vacías")
-        
-        # Verificar estados definitivos
-        if 'Definitive_Dev' in df.columns:
-            no_definitive = len(df[df['Definitive_Dev'] == 'No'])
-            if no_definitive == len(df):
-                problems.append("❌ Todos los registros muestran 'No' como definitivo")
-        
-        if problems:
-            for problem in problems:
-                st.error(problem)
-        else:
-            st.success("✅ No se identificaron problemas en la extracción")
+        # Mostrar muestra de datos para debug
+        st.subheader("🔍 Muestra de Datos para Debug")
+        st.dataframe(df.head(10), use_container_width=True)
         
     else:
-        st.info("👆 Sube un PDF para ver la comparación con el Excel esperado")
+        st.info("👆 Sube un PDF para ver información de debug de Camelot")
 
 def download_excel(df, filename):
     """Generar archivo Excel con formato mejorado"""
