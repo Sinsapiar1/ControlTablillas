@@ -81,19 +81,28 @@ class AlsinaPDFParser:
         data_lines = []
         in_data_section = False
         
-        for line in lines:
+        st.write("🔍 **Debug: Analizando líneas del PDF...**")
+        
+        for i, line in enumerate(lines):
             line = line.strip()
+            
+            # Mostrar las primeras 10 líneas para debug
+            if i < 10:
+                st.write(f"Línea {i+1}: `{line[:100]}{'...' if len(line) > 100 else ''}`")
             
             # Detectar inicio de sección de datos
             if 'FL' in line and any(char.isdigit() for char in line):
                 in_data_section = True
+                st.write(f"🎯 **Inicio de datos detectado en línea {i+1}:** `{line[:100]}`")
             
             # Si estamos en la sección de datos y la línea parece contener datos
             if in_data_section and self._is_data_line(line):
                 data_lines.append(line)
+                st.write(f"✅ **Línea de datos {len(data_lines)}:** `{line[:100]}`")
             
             # Detectar fin de sección de datos
             if in_data_section and line.startswith('Alsina Forms Co., Inc.'):
+                st.write(f"🏁 **Fin de datos detectado en línea {i+1}**")
                 break
         
         return data_lines
