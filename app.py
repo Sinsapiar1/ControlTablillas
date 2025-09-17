@@ -1,5 +1,5 @@
 """
-Aplicación simple y robusta usando Camelot-py para extraer tablas de PDFs
+Aplicación simple y rápida usando solo pdfplumber
 """
 
 import streamlit as st
@@ -12,12 +12,12 @@ import io
 from datetime import datetime, timedelta
 import re
 import numpy as np
-from camelot_parser import CamelotAlsinaParser
+from simple_parser import SimpleAlsinaParser
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Control de Tablillas - Alsina Forms (Camelot)",
-    page_icon="🐪",
+    page_title="Control de Tablillas - Alsina Forms (Simple)",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -57,8 +57,8 @@ st.markdown("""
         margin: 1rem 0;
     }
     
-    .camelot-badge {
-        background: #28a745;
+    .simple-badge {
+        background: #007bff;
         color: white;
         padding: 0.25rem 0.5rem;
         border-radius: 0.25rem;
@@ -69,13 +69,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-class CamelotTablillasController:
-    """Controlador usando Camelot"""
+class SimpleTablillasController:
+    """Controlador simple y rápido"""
     
     def __init__(self):
         self.data_file = "tablillas_history.json"
         self.config_file = "config.json"
-        self.pdf_parser = CamelotAlsinaParser()
+        self.pdf_parser = SimpleAlsinaParser()
         self.load_history()
         self.load_config()
     
@@ -137,7 +137,7 @@ class CamelotTablillasController:
             return data
     
     def extract_pdf_data(self, pdf_file):
-        """Extraer datos del PDF usando Camelot"""
+        """Extraer datos del PDF usando parser simple"""
         try:
             return self.pdf_parser.parse_pdf_file(pdf_file)
                 
@@ -200,32 +200,32 @@ class CamelotTablillasController:
         return df.sort_values('Priority_Score', ascending=False)
 
 def main():
-    st.markdown('<div class="main-header"><h1>🐪 Control de Tablillas - Alsina Forms (Camelot)</h1></div>', 
+    st.markdown('<div class="main-header"><h1>⚡ Control de Tablillas - Alsina Forms (Simple)</h1></div>', 
                 unsafe_allow_html=True)
     
-    # Información sobre Camelot
+    # Información sobre el parser simple
     st.markdown("""
     <div class="parser-info">
-    <h4>🐪 <strong>Parser Camelot Activo</strong></h4>
-    <p>Esta versión usa Camelot-py, la biblioteca más robusta para extracción de tablas de PDFs:</p>
+    <h4>⚡ <strong>Parser Simple Activo</strong></h4>
+    <p>Esta versión usa solo pdfplumber para extracción rápida y confiable:</p>
     <div>
-        <span class="camelot-badge">Camelot-py</span>
-        <span class="camelot-badge">Lattice</span>
-        <span class="camelot-badge">Stream</span>
-        <span class="camelot-badge">Robusto</span>
+        <span class="simple-badge">pdfplumber</span>
+        <span class="simple-badge">Rápido</span>
+        <span class="simple-badge">Confiable</span>
+        <span class="simple-badge">Simple</span>
     </div>
     <p><strong>Características:</strong></p>
     <ul>
-        <li>✅ <strong>Detección automática de tablas</strong> con bordes (Lattice)</li>
-        <li>✅ <strong>Extracción de tablas sin bordes</strong> (Stream)</li>
-        <li>✅ <strong>Manejo de headers complejos</strong> divididos en múltiples filas</li>
-        <li>✅ <strong>Procesamiento robusto</strong> de datos mixtos</li>
-        <li>✅ <strong>Múltiples estrategias</strong> de extracción</li>
+        <li>✅ <strong>Extracción rápida</strong> usando solo pdfplumber</li>
+        <li>✅ <strong>Sin dependencias complejas</strong> - funciona inmediatamente</li>
+        <li>✅ <strong>Procesamiento simple</strong> de líneas que empiezan con 'FL'</li>
+        <li>✅ <strong>Detección automática</strong> de fechas y números</li>
+        <li>✅ <strong>Interfaz limpia</strong> y fácil de usar</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
     
-    controller = CamelotTablillasController()
+    controller = SimpleTablillasController()
     
     # Sidebar
     st.sidebar.header("📂 Carga de Datos")
@@ -241,12 +241,13 @@ def main():
     st.sidebar.header("📊 Navegación")
     page = st.sidebar.selectbox(
         "Seleccionar Vista",
-        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos", "Debug Camelot"]
+        ["Dashboard Principal", "Análisis Detallado", "Verificación de Datos"]
     )
     
     if uploaded_file is not None:
         # Procesar PDF
-        df = controller.extract_pdf_data(uploaded_file)
+        with st.spinner("⚡ Procesando PDF..."):
+            df = controller.extract_pdf_data(uploaded_file)
         
         if df is not None and not df.empty:
             # Calcular prioridades
@@ -272,19 +273,11 @@ def main():
                 show_detailed_analysis(df_prioritized)
             elif page == "Verificación de Datos":
                 show_data_verification(df_prioritized)
-            elif page == "Debug Camelot":
-                show_camelot_debug(df_prioritized)
         else:
-            if page == "Debug Camelot":
-                show_camelot_debug(None)
-            else:
-                st.error("❌ No se pudieron extraer datos válidos del PDF")
-                st.info("💡 Verifica que el PDF contenga tablas extraíbles")
+            st.error("❌ No se pudieron extraer datos válidos del PDF")
+            st.info("💡 Verifica que el PDF contenga líneas que empiecen con 'FL'")
     else:
-        if page == "Debug Camelot":
-            show_camelot_debug(None)
-        else:
-            st.info("👆 Sube un archivo PDF para comenzar el análisis")
+        st.info("👆 Sube un archivo PDF para comenzar el análisis")
 
 def show_main_dashboard(df, controller):
     """Mostrar dashboard principal"""
@@ -350,7 +343,7 @@ def show_main_dashboard(df, controller):
     
     # Botón de descarga
     current_date = datetime.now().strftime('%Y%m%d_%H%M')
-    filename = f"tablillas_camelot_{current_date}.xlsx"
+    filename = f"tablillas_simple_{current_date}.xlsx"
     
     if st.button("📥 Descargar Reporte Excel", type="primary"):
         download_excel(df, filename)
@@ -402,7 +395,7 @@ def show_data_verification(df):
     
     st.markdown("""
     <div class="alert-success">
-    <strong>✅ Verificación de Extracción con Camelot</strong><br>
+    <strong>✅ Verificación de Extracción Simple</strong><br>
     Revisa los datos extraídos para asegurar que la información sea correcta.
     </div>
     """, unsafe_allow_html=True)
@@ -463,62 +456,6 @@ def show_data_verification(df):
                         st.write(f"**Valores nulos:** {df[col].isnull().sum()}")
     else:
         st.warning("⚠️ No se encontraron columnas esperadas en los datos")
-
-def show_camelot_debug(df):
-    """Mostrar información de debug de Camelot"""
-    st.header("🐪 Debug de Camelot")
-    
-    st.markdown("""
-    <div class="alert-warning">
-    <strong>🐪 Información de Debug de Camelot</strong><br>
-    Esta página muestra información técnica sobre el proceso de extracción con Camelot.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Información sobre Camelot
-    st.subheader("📚 Información de Camelot")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Métodos de Extracción:**")
-        st.write("• **Lattice**: Para tablas con bordes claros")
-        st.write("• **Stream**: Para tablas sin bordes claros")
-        st.write("• **Lattice específico**: Con parámetros optimizados")
-    
-    with col2:
-        st.write("**Características:**")
-        st.write("• Detección automática de tablas")
-        st.write("• Manejo de headers complejos")
-        st.write("• Procesamiento robusto de datos")
-    
-    # Información sobre el PDF procesado
-    if df is not None and not df.empty:
-        st.subheader("📊 Información del PDF Procesado")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write(f"**Total de registros:** {len(df)}")
-            st.write(f"**Columnas extraídas:** {len(df.columns)}")
-            st.write(f"**Registros completos:** {len(df.dropna(subset=['Customer_Name', 'Return_Packing_Slip']))}")
-        
-        with col2:
-            if 'WH_Code' in df.columns:
-                warehouses = df['WH_Code'].unique()
-                st.write(f"**Almacenes encontrados:** {len(warehouses)}")
-                st.write(f"**Almacenes:** {', '.join(warehouses)}")
-            
-            if 'Definitive_Dev' in df.columns:
-                definitive_yes = len(df[df['Definitive_Dev'] == 'Yes'])
-                st.write(f"**Devoluciones definitivas:** {definitive_yes}")
-        
-        # Mostrar muestra de datos para debug
-        st.subheader("🔍 Muestra de Datos para Debug")
-        st.dataframe(df.head(10), use_container_width=True)
-        
-    else:
-        st.info("👆 Sube un PDF para ver información de debug de Camelot")
 
 def download_excel(df, filename):
     """Generar archivo Excel con formato mejorado"""
