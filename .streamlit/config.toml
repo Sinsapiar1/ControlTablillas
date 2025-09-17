@@ -1,25 +1,13 @@
 [server]
-# Configuración del servidor
-port = 8501
 headless = true
+port = 8501
 enableCORS = false
 enableXsrfProtection = false
 
-[logger]
-# Configuración de logs
-level = "error"
-
-[client]
-# Configuración del cliente
-showErrorDetails = false
-
-[runner]
-# Configuración del runner
-fastReruns = true
-enforceSerializableSessionState = false
+[browser]
+gatherUsageStats = false
 
 [theme]
-# Configuración del tema
 primaryColor = "#1f4e79"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
