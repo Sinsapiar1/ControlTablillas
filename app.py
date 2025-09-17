@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import re
 import pdfplumber
 import base64
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 
 # Configuración de la página
