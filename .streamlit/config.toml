@@ -1,14 +1,42 @@
+[global]
+# Configuración global para la versión local
+developmentMode = false
+
 [server]
-headless = true
+# Configuración del servidor local
 port = 8501
+address = "localhost"
+headless = false
 enableCORS = false
-enableXsrfProtection = false
+enableXsrfProtection = true
+maxUploadSize = 200
 
 [browser]
+# Configuración del navegador
 gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
 
 [theme]
-primaryColor = "#1e3c72"
+# Tema personalizado para la aplicación
+primaryColor = "#667eea"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
+font = "sans serif"
+
+[client]
+# Configuración del cliente
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[runner]
+# Configuración del runner
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true
+
+[logger]
+# Configuración de logs
+level = "info"
+messageFormat = "%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s"

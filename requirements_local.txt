@@ -1,0 +1,34 @@
+# 🏭 Sistema de Control de Tablillas - Versión Local
+# Dependencias optimizadas para instalación local
+
+# Framework principal
+streamlit==1.28.1
+
+# Procesamiento de datos
+pandas==2.0.3
+numpy==1.24.3
+
+# Visualización
+plotly==5.17.0
+
+# Excel
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+xlrd==2.0.1
+
+# PDF y extracción de tablas
+camelot-py[cv]==0.10.1
+PyPDF2==2.12.1
+
+# Procesamiento de imágenes
+opencv-python==4.8.1.78
+
+# Sistema (Ghostscript para Camelot)
+ghostscript==0.7
+
+# Utilidades adicionales
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Para mejor rendimiento local
+psutil==5.9.5
