@@ -12,12 +12,214 @@ import glob
 from typing import Optional, List, Dict, Tuple
 import hashlib
 
-# Intentar importar Camelot
-try:
-    import camelot
-    CAMELOT_AVAILABLE = True
-except ImportError:
-    CAMELOT_AVAILABLE = False
+# Importar Camelot (Vercel soporta Camelot completamente)
+import camelot
+CAMELOT_AVAILABLE = True
+
+class ExcelAnalyzer:
+    """Analizador de múltiples archivos Excel para comparación"""
+    
+    def __init__(self, excel_folder: str = "excel_exports"):
+        self.excel_folder = excel_folder
+        self.ensure_folder_exists()
+    
+    def ensure_folder_exists(self):
+        """Crear carpeta de Excel si no existe"""
+        if not os.path.exists(self.excel_folder):
+            os.makedirs(self.excel_folder)
+    
+    def load_excel_files(self, file_paths: List[str]) -> Dict[str, pd.DataFrame]:
+        """Cargar múltiples archivos Excel"""
+        excel_data = {}
+        
+        for file_path in file_paths:
+            try:
+                # Leer Excel
+                df = pd.read_excel(file_path)
+                
+                # Extraer fecha del nombre del archivo o usar fecha de modificación
+                file_name = os.path.basename(file_path)
+                
+                # Intentar extraer fecha del nombre (formato: tablillas_YYYYMMDD_HHMM.xlsx)
+                date_match = re.search(r'(\d{8})_(\d{4})', file_name)
+                if date_match:
+                    date_str = date_match.group(1)
+                    file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                else:
+                    # Usar fecha de modificación del archivo
+                    mod_time = os.path.getmtime(file_path)
+                    file_date = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d')
+                
+                excel_data[file_date] = df
+                
+            except Exception as e:
+                st.error(f"❌ Error cargando {file_path}: {str(e)}")
+        
+        return excel_data
+    
+    def compare_excel_files(self, excel_data: Dict[str, pd.DataFrame]) -> Dict:
+        """Comparar datos entre archivos Excel"""
+        if len(excel_data) < 2:
+            return {"error": "Se necesitan al menos 2 archivos para comparar"}
+        
+        # Ordenar por fecha
+        sorted_dates = sorted(excel_data.keys())
+        comparisons = []
+        
+        for i in range(1, len(sorted_dates)):
+            current_date = sorted_dates[i]
+            previous_date = sorted_dates[i-1]
+            current_df = excel_data[current_date]
+            previous_df = excel_data[previous_date]
+            
+            comparison = self.compare_two_dataframes(
+                current_df, previous_df, current_date, previous_date
+            )
+            comparisons.append(comparison)
+        
+        # Resumen general
+        summary = self.create_comparison_summary(comparisons, excel_data)
+        
+        return {
+            "comparisons": comparisons,
+            "summary": summary,
+            "dates": sorted_dates
+        }
+    
+    def compare_two_dataframes(self, current_df: pd.DataFrame, previous_df: pd.DataFrame, 
+                              current_date: str, previous_date: str) -> Dict:
+        """Comparar dos DataFrames específicos"""
+        # Normalizar nombres de columnas para la comparación
+        current_df = self.normalize_dataframe(current_df)
+        previous_df = self.normalize_dataframe(previous_df)
+        
+        # Albaranes actuales y anteriores
+        current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
+        previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
+        
+        # Calcular cambios
+        new_albaranes = current_albaranes - previous_albaranes
+        closed_albaranes = previous_albaranes - current_albaranes
+        continuing_albaranes = current_albaranes.intersection(previous_albaranes)
+        
+        # Análisis detallado de cambios en albaranes
+        closed_tablets = 0
+        added_tablets = 0
+        changed_albaranes = []
+        
+        for albaran in continuing_albaranes:
+            current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
+            previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
+            
+            if not current_row.empty and not previous_row.empty:
+                # Datos actuales
+                current_open = pd.to_numeric(current_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                current_total = pd.to_numeric(current_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                current_tablets_list = str(current_row.iloc[0].get('Tablets', ''))
+                
+                # Datos anteriores
+                previous_open = pd.to_numeric(previous_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                previous_total = pd.to_numeric(previous_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                previous_tablets_list = str(previous_row.iloc[0].get('Tablets', ''))
+                
+                # Análisis de cambios
+                change_info = {
+                    'albaran': albaran,
+                    'customer': current_row.iloc[0].get('Customer_Name', 'N/A'),
+                    'previous_open': previous_open,
+                    'current_open': current_open,
+                    'previous_total': previous_total,
+                    'current_total': current_total,
+                    'changes': []
+                }
+                
+                # 1. Detectar tablillas cerradas (reducción en Open)
+                if previous_open > current_open:
+                    tablets_closed_count = previous_open - current_open
+                    closed_tablets += tablets_closed_count
+                    change_info['changes'].append(f"🔒 {tablets_closed_count} tablillas cerradas")
+                
+                # 2. Detectar tablillas agregadas (aumento en Total)
+                if current_total > previous_total:
+                    tablets_added_count = current_total - previous_total
+                    added_tablets += tablets_added_count
+                    change_info['changes'].append(f"➕ {tablets_added_count} tablillas agregadas")
+                
+                # 3. Detectar cambios en lista de tablillas
+                if current_tablets_list != previous_tablets_list and current_tablets_list and previous_tablets_list:
+                    change_info['changes'].append(f"📝 Lista de tablillas modificada")
+                    change_info['previous_tablets'] = previous_tablets_list
+                    change_info['current_tablets'] = current_tablets_list
+                
+                # Solo agregar si hay cambios
+                if change_info['changes']:
+                    changed_albaranes.append(change_info)
+        
+        return {
+            'current_date': current_date,
+            'previous_date': previous_date,
+            'new_albaranes': len(new_albaranes),
+            'closed_albaranes': len(closed_albaranes),
+            'closed_tablets': closed_tablets,
+            'added_tablets': added_tablets,
+            'new_albaranes_list': list(new_albaranes),
+            'closed_albaranes_list': list(closed_albaranes),
+            'changed_albaranes': changed_albaranes,
+            'current_total_open': current_df['Total_Open'].sum() if 'Total_Open' in current_df.columns else 0,
+            'previous_total_open': previous_df['Total_Open'].sum() if 'Total_Open' in previous_df.columns else 0,
+            'current_total_albaranes': len(current_df),
+            'previous_total_albaranes': len(previous_df),
+            'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])
+        }
+    
+    def normalize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalizar DataFrame para comparación"""
+        # Asegurar que las columnas principales existen
+        required_columns = ['Return_Packing_Slip', 'Total_Open', 'Customer_Name']
+        for col in required_columns:
+            if col not in df.columns:
+                # Buscar columnas similares
+                similar_cols = [c for c in df.columns if col.lower() in c.lower() or c.lower() in col.lower()]
+                if similar_cols:
+                    df[col] = df[similar_cols[0]]
+                else:
+                    df[col] = 0 if 'Total' in col else 'N/A'
+        return df
+    
+    def create_comparison_summary(self, comparisons: List[Dict], excel_data: Dict[str, pd.DataFrame]) -> Dict:
+        """Crear resumen de todas las comparaciones"""
+        if not comparisons:
+            return {}
+        
+        total_new_albaranes = sum(c['new_albaranes'] for c in comparisons)
+        total_closed_albaranes = sum(c['closed_albaranes'] for c in comparisons)
+        total_closed_tablets = sum(c['closed_tablets'] for c in comparisons)
+        total_added_tablets = sum(c.get('added_tablets', 0) for c in comparisons)
+        
+        # Análisis de tendencias
+        dates = sorted(excel_data.keys())
+        
+        # Evolución de tablillas pendientes
+        open_evolution = []
+        for date in dates:
+            df = excel_data[date]
+            if 'Total_Open' in df.columns:
+                total_open = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum()
+            else:
+                total_open = 0
+            open_evolution.append({'date': date, 'total_open': total_open})
+        
+        return {
+            'total_new_albaranes': total_new_albaranes,
+            'total_closed_albaranes': total_closed_albaranes,
+            'total_closed_tablets': total_closed_tablets,
+            'total_added_tablets': total_added_tablets,
+            'analysis_period': f"{dates[0]} a {dates[-1]}" if len(dates) >= 2 else dates[0],
+            'open_evolution': open_evolution,
+            'num_files_analyzed': len(excel_data),
+            'most_recent_date': dates[-1] if dates else None,
+            'oldest_date': dates[0] if dates else None
+        }
 
 # Configuración de página
 st.set_page_config(
@@ -344,6 +546,7 @@ def main():
         <h1>🏗️ SISTEMA PROFESIONAL DE CONTROL DE TABLILLAS</h1>
         <h2>Alsina Forms Co. - Análisis Diario por Excel</h2>
         <p>📄 PDF → Excel perfecto | 📊 Análisis multi-archivo | 🔄 Comparaciones automáticas</p>
+        <div style="background: linear-gradient(45deg, #000, #333); color: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.8rem; display: inline-block; margin: 1rem 0;">🚀 Powered by Vercel + Camelot</div>
     </div>
     ''', unsafe_allow_html=True)
     
@@ -351,13 +554,13 @@ def main():
     if not CAMELOT_AVAILABLE:
         st.markdown("""
         <div class="alert-high">
-        <h3>❌ Camelot no está instalado</h3>
-        <p>Para instalar las dependencias necesarias:</p>
-        <code>pip install camelot-py[cv]</code><br>
-        <code>pip install opencv-python</code>
+        <h3>❌ Camelot no está disponible</h3>
+        <p>Error inesperado con Camelot. Verifica la instalación.</p>
         </div>
         """, unsafe_allow_html=True)
         st.stop()
+    else:
+        st.success("🐪 Camelot cargado correctamente en Vercel!")
     
     # Pestañas principales
     tab1, tab2 = st.tabs(["📄 PROCESAR PDF", "📊 ANÁLISIS MULTI-EXCEL"])
@@ -586,11 +789,146 @@ def show_excel_analysis_tab():
     )
     
     if uploaded_excel_files and len(uploaded_excel_files) >= 2:
-        st.info("📊 Análisis multi-Excel disponible próximamente")
+        # Procesar archivos Excel
+        analyzer = ExcelAnalyzer()
+        
+        # Guardar archivos temporalmente y cargarlos
+        temp_files = []
+        for uploaded_file in uploaded_excel_files:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                temp_files.append(tmp_file.name)
+        
+        # Cargar datos de Excel
+        excel_data = analyzer.load_excel_files(temp_files)
+        
+        # Limpiar archivos temporales
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+        
+        if len(excel_data) >= 2:
+            st.success(f"✅ {len(excel_data)} archivos cargados correctamente")
+            
+            # Realizar análisis comparativo
+            analysis_results = analyzer.compare_excel_files(excel_data)
+            
+            if "error" not in analysis_results:
+                show_comparative_analysis(analysis_results, excel_data)
+            else:
+                st.error(analysis_results["error"])
+        else:
+            st.error("❌ No se pudieron cargar suficientes archivos válidos")
+    
     elif uploaded_excel_files and len(uploaded_excel_files) == 1:
         st.warning("⚠️ Se necesitan al menos 2 archivos para hacer comparación")
+    
     else:
         st.info("📂 Selecciona múltiples archivos Excel para comenzar el análisis")
+
+def show_comparative_analysis(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
+    """Mostrar análisis comparativo completo"""
+    
+    # Resumen general
+    show_analysis_summary(analysis_results["summary"])
+    
+    # Evolución temporal
+    show_temporal_evolution(analysis_results["summary"]["open_evolution"])
+    
+    # Comparaciones día a día
+    show_daily_comparisons(analysis_results["comparisons"])
+
+def show_analysis_summary(summary: Dict):
+    """Mostrar resumen del análisis"""
+    st.markdown('<div class="section-header">📊 RESUMEN DEL ANÁLISIS</div>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("📁 Archivos Analizados", summary.get('num_files_analyzed', 0))
+    
+    with col2:
+        st.metric("🆕 Nuevos Albaranes", summary.get('total_new_albaranes', 0))
+    
+    with col3:
+        st.metric("🔒 Tablillas Cerradas", summary.get('total_closed_tablets', 0))
+    
+    with col4:
+        st.metric("➕ Tablillas Agregadas", summary.get('total_added_tablets', 0))
+    
+    with col5:
+        st.metric("📅 Período", summary.get('analysis_period', 'N/A'))
+
+def show_temporal_evolution(open_evolution: List[Dict]):
+    """Mostrar evolución temporal"""
+    st.subheader("📈 Evolución de Tablillas Pendientes")
+    
+    if open_evolution:
+        df_evolution = pd.DataFrame(open_evolution)
+        df_evolution['date'] = pd.to_datetime(df_evolution['date'])
+        
+        fig = px.line(
+            df_evolution,
+            x='date',
+            y='total_open',
+            title='Evolución Diaria de Tablillas Pendientes',
+            markers=True,
+            color_discrete_sequence=['#dc3545']
+        )
+        
+        fig.update_layout(
+            xaxis_title="Fecha",
+            yaxis_title="Tablillas Pendientes",
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+def show_daily_comparisons(comparisons: List[Dict]):
+    """Mostrar comparaciones día a día"""
+    st.markdown('<div class="section-header">🔄 CAMBIOS DÍA A DÍA</div>', 
+                unsafe_allow_html=True)
+    
+    for i, comparison in enumerate(comparisons):
+        st.subheader(f"📅 {comparison['previous_date']} → {comparison['current_date']}")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown(f'''
+            <div class="comparison-box">
+            <h4>📈 Nuevos Albaranes</h4>
+            <h2>{comparison['new_albaranes']}</h2>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f'''
+            <div class="comparison-box">
+            <h4>✅ Albaranes Cerrados</h4>
+            <h2>{comparison['closed_albaranes']}</h2>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f'''
+            <div class="comparison-box">
+            <h4>🔒 Tablillas Cerradas</h4>
+            <h2>{comparison['closed_tablets']}</h2>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f'''
+            <div class="comparison-box">
+            <h4>➕ Tablillas Agregadas</h4>
+            <h2>{comparison.get('added_tablets', 0)}</h2>
+            <small>{comparison.get('albaranes_with_added_tablets', 0)} albaranes</small>
+            </div>
+            ''', unsafe_allow_html=True)
 
 def show_extraction_error():
     """Mostrar error de extracción con soluciones"""
