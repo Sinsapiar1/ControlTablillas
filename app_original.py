@@ -32,6 +32,16 @@ st.set_page_config(
 # CSS Profesional
 st.markdown("""
 <style>
+    /* Evitar problemas de transparencia después de descargas */
+    .stApp {
+        opacity: 1 !important;
+        background-color: #ffffff !important;
+    }
+    
+    .stApp > div {
+        opacity: 1 !important;
+    }
+    
     .main-header {
         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
         color: white;
@@ -783,6 +793,14 @@ class TablillasExtractorPro:
             return df
 
 def main():
+    # Inicializar session_state para evitar problemas de transparencia
+    if 'pdf_excel_generated' not in st.session_state:
+        st.session_state['pdf_excel_generated'] = False
+    if 'pdf_excel_data' not in st.session_state:
+        st.session_state['pdf_excel_data'] = None
+    if 'pdf_filename' not in st.session_state:
+        st.session_state['pdf_filename'] = None
+    
     # Header profesional
     st.markdown('''
     <div class="main-header">
@@ -829,6 +847,12 @@ def show_pdf_processing_tab():
     )
     
     if uploaded_file is not None:
+        # Limpiar estado anterior al procesar nuevo PDF
+        if st.session_state.get('pdf_excel_generated', False):
+            st.session_state['pdf_excel_generated'] = False
+            st.session_state['pdf_excel_data'] = None
+            st.session_state['pdf_filename'] = None
+        
         st.markdown('<div class="file-info">📄 <strong>Procesando PDF...</strong></div>', 
                     unsafe_allow_html=True)
         
@@ -945,12 +969,10 @@ def generate_daily_excel(df: pd.DataFrame):
         if st.button("📥 Generar Excel", type="primary"):
             excel_data = create_comprehensive_excel(df)
             
-            st.download_button(
-                label="💾 Descargar Excel Completo",
-                data=excel_data,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Guardar en session_state para evitar recarga
+            st.session_state['pdf_excel_data'] = excel_data
+            st.session_state['pdf_filename'] = filename
+            st.session_state['pdf_excel_generated'] = True
             
             st.success(f"✅ Excel generado: **{filename}**")
             
@@ -959,6 +981,33 @@ def generate_daily_excel(df: pd.DataFrame):
             💡 **Guarda este archivo localmente** con la fecha del día.
             Luego usa la pestaña "ANÁLISIS MULTI-EXCEL" para comparar múltiples días.
             """)
+    
+    # NUEVO: Mostrar botón de descarga automáticamente si se generó Excel
+    if st.session_state.get('pdf_excel_generated', False):
+        st.markdown('<div class="section-header">💾 DESCARGAR EXCEL GENERADO</div>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.success("✅ Excel listo para descargar")
+        
+        with col2:
+            st.download_button(
+                label="💾 Descargar Excel Completo",
+                data=st.session_state.get('pdf_excel_data'),
+                file_name=st.session_state.get('pdf_filename', 'tablillas_procesadas.xlsx'),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+    
+    # Botón para limpiar estado y evitar problemas de transparencia
+    if st.session_state.get('pdf_excel_generated', False):
+        if st.button("🔄 Limpiar Estado", help="Limpia el estado para evitar problemas de transparencia"):
+            st.session_state['pdf_excel_generated'] = False
+            st.session_state['pdf_excel_data'] = None
+            st.session_state['pdf_filename'] = None
+            st.rerun()
 
 def create_comprehensive_excel(df: pd.DataFrame) -> bytes:
     """Crear Excel completo con múltiples hojas"""
