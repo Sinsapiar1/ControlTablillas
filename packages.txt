@@ -1,4 +1,0 @@
-python3-venv
-python3-full
-python3-dev
-build-essential

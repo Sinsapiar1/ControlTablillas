@@ -2,4 +2,6 @@ streamlit
 pandas
 plotly
 openpyxl
-pdfplumber
+camelot-py[cv]
+opencv-python
+ghostscript

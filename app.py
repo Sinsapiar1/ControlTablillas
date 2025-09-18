@@ -2,49 +2,336 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import io
 from datetime import datetime, timedelta
 import re
 import tempfile
 import os
-from typing import Optional, List, Dict
+import glob
+from typing import Optional, List, Dict, Tuple
+import hashlib
 
-# Importar pdfplumber (más ligero y rápido)
+# Intentar importar Camelot
 try:
-    import pdfplumber
-    PDFPLUMBER_AVAILABLE = True
+    import camelot
+    CAMELOT_AVAILABLE = True
 except ImportError:
-    PDFPLUMBER_AVAILABLE = False
-    st.error("⚠️ pdfplumber no está disponible")
+    CAMELOT_AVAILABLE = False
 
 # Configuración de página
 st.set_page_config(
-    page_title="Control de Tablillas - Alsina Forms",
-    page_icon="📊",
+    page_title="Control Profesional de Tablillas - Alsina Forms",
+    page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS
+# CSS Profesional
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(90deg, #1f4e79, #2e86c1);
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    .metric-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        border-left: 4px solid #2a5298;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin: 1rem 0;
+    }
+    
+    .kpi-container {
+        background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+        padding: 2rem;
+        border-radius: 15px;
+        margin: 2rem 0;
+        border: 1px solid #dee2e6;
+    }
+    
+    .alert-high { 
+        background: linear-gradient(45deg, #dc3545, #c82333); 
+        color: white; 
+        padding: 1rem; 
+        border-radius: 8px; 
+        margin: 1rem 0; 
+        font-weight: bold;
+    }
+    
+    .alert-medium { 
+        background: linear-gradient(45deg, #fd7e14, #e85d04); 
+        color: white; 
+        padding: 1rem; 
+        border-radius: 8px; 
+        margin: 1rem 0; 
+        font-weight: bold;
+    }
+    
+    .alert-low { 
+        background: linear-gradient(45deg, #28a745, #20c997); 
+        color: white; 
+        padding: 1rem; 
+        border-radius: 8px; 
+        margin: 1rem 0; 
+        font-weight: bold;
+    }
+    
+    .success-box { 
+        background: linear-gradient(45deg, #d4edda, #c3e6cb); 
+        padding: 1.5rem; 
+        border-radius: 12px; 
+        margin: 1rem 0; 
+        border-left: 4px solid #28a745;
+    }
+    
+    .comparison-box {
+        background: linear-gradient(45deg, #fff3cd, #ffeaa7);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin: 1rem 0;
+        border-left: 4px solid #ffc107;
+    }
+    
+    .section-header {
+        background: linear-gradient(90deg, #495057, #6c757d);
         color: white;
         padding: 1rem;
-        border-radius: 10px;
-        margin-bottom: 1rem;
-        text-align: center;
+        border-radius: 8px;
+        margin: 2rem 0 1rem 0;
+        font-size: 1.2rem;
+        font-weight: bold;
     }
-    .success-box { background: #d4edda; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
-    .error-box { background: #f8d7da; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
-    .warning-box { background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
-    .info-box { background: #d1ecf1; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+    
+    .file-info {
+        background: #e3f2fd;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+        border-left: 4px solid #2196f3;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-class TablillasExtractor:
-    """Extractor optimizado para PDFs de Alsina Forms usando pdfplumber"""
+class ExcelAnalyzer:
+    """Analizador de múltiples archivos Excel para comparación"""
+    
+    def __init__(self, excel_folder: str = "excel_exports"):
+        self.excel_folder = excel_folder
+        self.ensure_folder_exists()
+    
+    def ensure_folder_exists(self):
+        """Crear carpeta de Excel si no existe"""
+        if not os.path.exists(self.excel_folder):
+            os.makedirs(self.excel_folder)
+    
+    def load_excel_files(self, file_paths: List[str]) -> Dict[str, pd.DataFrame]:
+        """Cargar múltiples archivos Excel"""
+        excel_data = {}
+        
+        for file_path in file_paths:
+            try:
+                # Leer Excel
+                df = pd.read_excel(file_path)
+                
+                # Extraer fecha del nombre del archivo o usar fecha de modificación
+                file_name = os.path.basename(file_path)
+                
+                # Intentar extraer fecha del nombre (formato: tablillas_YYYYMMDD_HHMM.xlsx)
+                date_match = re.search(r'(\d{8})_(\d{4})', file_name)
+                if date_match:
+                    date_str = date_match.group(1)
+                    file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                else:
+                    # Usar fecha de modificación del archivo
+                    mod_time = os.path.getmtime(file_path)
+                    file_date = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d')
+                
+                excel_data[file_date] = df
+                
+            except Exception as e:
+                st.error(f"❌ Error cargando {file_path}: {str(e)}")
+        
+        return excel_data
+    
+    def compare_excel_files(self, excel_data: Dict[str, pd.DataFrame]) -> Dict:
+        """Comparar datos entre archivos Excel"""
+        if len(excel_data) < 2:
+            return {"error": "Se necesitan al menos 2 archivos para comparar"}
+        
+        # Ordenar por fecha
+        sorted_dates = sorted(excel_data.keys())
+        
+        comparisons = []
+        
+        for i in range(1, len(sorted_dates)):
+            current_date = sorted_dates[i]
+            previous_date = sorted_dates[i-1]
+            
+            current_df = excel_data[current_date]
+            previous_df = excel_data[previous_date]
+            
+            comparison = self.compare_two_dataframes(
+                current_df, previous_df, current_date, previous_date
+            )
+            comparisons.append(comparison)
+        
+        # Resumen general
+        summary = self.create_comparison_summary(comparisons, excel_data)
+        
+        return {
+            "comparisons": comparisons,
+            "summary": summary,
+            "dates": sorted_dates
+        }
+    
+    def compare_two_dataframes(self, current_df: pd.DataFrame, previous_df: pd.DataFrame, 
+                              current_date: str, previous_date: str) -> Dict:
+        """Comparar dos DataFrames específicos"""
+        
+        # Normalizar nombres de columnas para la comparación
+        current_df = self.normalize_dataframe(current_df)
+        previous_df = self.normalize_dataframe(previous_df)
+        
+        # Albaranes actuales y anteriores
+        current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
+        previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
+        
+        # Calcular cambios
+        new_albaranes = current_albaranes - previous_albaranes
+        closed_albaranes = previous_albaranes - current_albaranes
+        continuing_albaranes = current_albaranes.intersection(previous_albaranes)
+        
+        # Análisis detallado de cambios en albaranes
+        closed_tablets = 0
+        added_tablets = 0
+        changed_albaranes = []
+        
+        for albaran in continuing_albaranes:
+            current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
+            previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
+            
+            if not current_row.empty and not previous_row.empty:
+                # Datos actuales
+                current_open = pd.to_numeric(current_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                current_total = pd.to_numeric(current_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                current_tablets_list = str(current_row.iloc[0].get('Tablets', ''))
+                
+                # Datos anteriores  
+                previous_open = pd.to_numeric(previous_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                previous_total = pd.to_numeric(previous_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                previous_tablets_list = str(previous_row.iloc[0].get('Tablets', ''))
+                
+                # Análisis de cambios
+                change_info = {
+                    'albaran': albaran,
+                    'customer': current_row.iloc[0].get('Customer_Name', 'N/A'),
+                    'previous_open': previous_open,
+                    'current_open': current_open,
+                    'previous_total': previous_total,
+                    'current_total': current_total,
+                    'changes': []
+                }
+                
+                # 1. Detectar tablillas cerradas (reducción en Open)
+                if previous_open > current_open:
+                    tablets_closed_count = previous_open - current_open
+                    closed_tablets += tablets_closed_count
+                    change_info['changes'].append(f"🔒 {tablets_closed_count} tablillas cerradas")
+                
+                # 2. Detectar tablillas agregadas (aumento en Total)
+                if current_total > previous_total:
+                    tablets_added_count = current_total - previous_total
+                    added_tablets += tablets_added_count
+                    change_info['changes'].append(f"➕ {tablets_added_count} tablillas agregadas")
+                
+                # 3. Detectar cambios en lista de tablillas
+                if current_tablets_list != previous_tablets_list and current_tablets_list and previous_tablets_list:
+                    change_info['changes'].append(f"📝 Lista de tablillas modificada")
+                    change_info['previous_tablets'] = previous_tablets_list
+                    change_info['current_tablets'] = current_tablets_list
+                
+                # Solo agregar si hay cambios
+                if change_info['changes']:
+                    changed_albaranes.append(change_info)
+        
+        return {
+            'current_date': current_date,
+            'previous_date': previous_date,
+            'new_albaranes': len(new_albaranes),
+            'closed_albaranes': len(closed_albaranes),
+            'closed_tablets': closed_tablets,
+            'added_tablets': added_tablets,
+            'new_albaranes_list': list(new_albaranes),
+            'closed_albaranes_list': list(closed_albaranes),
+            'changed_albaranes': changed_albaranes,
+            'current_total_open': current_df['Total_Open'].sum() if 'Total_Open' in current_df.columns else 0,
+            'previous_total_open': previous_df['Total_Open'].sum() if 'Total_Open' in previous_df.columns else 0,
+            'current_total_albaranes': len(current_df),
+            'previous_total_albaranes': len(previous_df),
+            'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])
+        }
+    
+    def normalize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalizar DataFrame para comparación"""
+        # Asegurar que las columnas principales existen
+        required_columns = ['Return_Packing_Slip', 'Total_Open', 'Customer_Name']
+        
+        for col in required_columns:
+            if col not in df.columns:
+                # Buscar columnas similares
+                similar_cols = [c for c in df.columns if col.lower() in c.lower() or c.lower() in col.lower()]
+                if similar_cols:
+                    df[col] = df[similar_cols[0]]
+                else:
+                    df[col] = 0 if 'Total' in col else 'N/A'
+        
+        return df
+    
+    def create_comparison_summary(self, comparisons: List[Dict], excel_data: Dict[str, pd.DataFrame]) -> Dict:
+        """Crear resumen de todas las comparaciones"""
+        if not comparisons:
+            return {}
+        
+        total_new_albaranes = sum(c['new_albaranes'] for c in comparisons)
+        total_closed_albaranes = sum(c['closed_albaranes'] for c in comparisons)
+        total_closed_tablets = sum(c['closed_tablets'] for c in comparisons)
+        total_added_tablets = sum(c.get('added_tablets', 0) for c in comparisons)
+        
+        # Análisis de tendencias
+        dates = sorted(excel_data.keys())
+        
+        # Evolución de tablillas pendientes
+        open_evolution = []
+        for date in dates:
+            df = excel_data[date]
+            if 'Total_Open' in df.columns:
+                total_open = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum()
+            else:
+                total_open = 0
+            open_evolution.append({'date': date, 'total_open': total_open})
+        
+        return {
+            'total_new_albaranes': total_new_albaranes,
+            'total_closed_albaranes': total_closed_albaranes,
+            'total_closed_tablets': total_closed_tablets,
+            'total_added_tablets': total_added_tablets,
+            'analysis_period': f"{dates[0]} a {dates[-1]}" if len(dates) >= 2 else dates[0],
+            'open_evolution': open_evolution,
+            'num_files_analyzed': len(excel_data),
+            'most_recent_date': dates[-1] if dates else None,
+            'oldest_date': dates[0] if dates else None
+        }
+
+class TablillasExtractorPro:
+    """Extractor profesional mejorado"""
     
     def __init__(self):
         self.expected_columns = [
@@ -54,198 +341,82 @@ class TablillasExtractor:
             'Tablets', 'Total_Tablets', 'Open_Tablets', 'Total_Open',
             'Counting_Delay', 'Validation_Delay'
         ]
+        self.analyzer = ExcelAnalyzer()
     
     def extract_from_pdf(self, uploaded_file) -> Optional[pd.DataFrame]:
-        """Extrae datos usando pdfplumber optimizado"""
-        if not PDFPLUMBER_AVAILABLE:
-            st.error("❌ pdfplumber no está disponible")
+        """Extrae datos usando Camelot (método original perfeccionado)"""
+        if not CAMELOT_AVAILABLE:
+            st.error("⚠️ Camelot no está instalado. Ejecuta: pip install camelot-py[cv]")
             return None
         
         try:
-            st.info("📄 Extrayendo datos con pdfplumber...")
+            # Crear archivo temporal
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_file_path = tmp_file.name
             
-            # Leer PDF con pdfplumber
-            with pdfplumber.open(uploaded_file) as pdf:
-                all_text = ""
-                
-                for page_num, page in enumerate(pdf.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        all_text += page_text + "\n"
-                
-                st.write(f"📄 PDF procesado: {len(pdf.pages)} páginas, {len(all_text)} caracteres")
+            st.info("🔄 Extrayendo datos con Camelot...")
             
-            # Procesar texto para encontrar líneas FL
-            return self._process_text_optimized(all_text)
+            # Probar diferentes configuraciones de Camelot
+            tables = None
+            
+            try:
+                # Método 1: Stream (mejor para tablas sin bordes definidos)
+                tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
+                st.write(f"📊 Método Stream: {len(tables)} tablas encontradas")
+            except Exception as e:
+                st.write(f"Stream falló: {str(e)}")
+                
+            if not tables or len(tables) == 0:
+                try:
+                    # Método 2: Lattice (mejor para tablas con bordes)
+                    tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='lattice')
+                    st.write(f"📊 Método Lattice: {len(tables)} tablas encontradas")
+                except Exception as e:
+                    st.write(f"Lattice falló: {str(e)}")
+            
+            # Limpiar archivo temporal
+            os.unlink(tmp_file_path)
+            
+            if not tables or len(tables) == 0:
+                st.error("❌ No se encontraron tablas en el PDF")
+                return None
+            
+            # Procesar tablas encontradas
+            return self._process_tables_advanced(tables)
             
         except Exception as e:
             st.error(f"❌ Error procesando PDF: {str(e)}")
             return None
     
-    def _process_text_optimized(self, text: str) -> Optional[pd.DataFrame]:
-        """Procesa texto de forma optimizada para extraer datos FL"""
-        lines = text.split('\n')
-        fl_lines = []
+    def _process_tables_advanced(self, tables) -> pd.DataFrame:
+        """Procesamiento avanzado de tablas extraídas"""
+        all_data = []
         
-        # Buscar líneas que empiecen con FL de forma más inteligente
-        for line in lines:
-            line = line.strip()
-            if self._is_valid_fl_line(line):
-                fl_lines.append(line)
+        for i, table in enumerate(tables):
+            st.write(f"🔍 Procesando tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
+            
+            df = table.df
+            
+            # Filtrar solo filas que empiecen con FL (datos de Alsina Forms)
+            fl_rows = df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)]
+            
+            if len(fl_rows) > 0:
+                st.write(f"✅ {len(fl_rows)} filas FL encontradas en tabla {i+1}")
+                all_data.append(fl_rows)
         
-        st.write(f"📋 Encontradas {len(fl_lines)} líneas FL válidas")
-        
-        if not fl_lines:
-            st.error("❌ No se encontraron líneas FL válidas en el PDF")
+        if not all_data:
+            st.error("❌ No se encontraron filas con datos FL")
             return None
         
-        # Procesar cada línea FL
-        processed_data = []
-        for i, line in enumerate(fl_lines):
-            row_data = self._parse_fl_line_optimized(line, i + 1)
-            if row_data:
-                processed_data.append(row_data)
+        # Combinar todas las tablas FL
+        combined_df = pd.concat(all_data, ignore_index=True)
         
-        if processed_data:
-            df = pd.DataFrame(processed_data)
-            return self._clean_and_standardize(df)
-        else:
-            st.error("❌ No se pudieron procesar las líneas FL")
-            return None
+        # Limpiar y estandarizar
+        return self._clean_and_standardize_advanced(combined_df)
     
-    def _is_valid_fl_line(self, line: str) -> bool:
-        """Verifica si una línea es una línea FL válida"""
-        if not line.startswith('FL'):
-            return False
-        
-        parts = line.split()
-        if len(parts) < 8:
-            return False
-        
-        # Verificar que tenga al menos un número de packing slip (12 dígitos)
-        has_packing_slip = any(re.match(r'\d{12}', part) for part in parts)
-        if not has_packing_slip:
-            return False
-        
-        # Verificar que tenga al menos una fecha
-        has_date = any(re.match(r'\d{1,2}/\d{1,2}/\d{4}', part) for part in parts)
-        if not has_date:
-            return False
-        
-        return True
-    
-    def _parse_fl_line_optimized(self, line: str, line_num: int) -> Optional[Dict]:
-        """Parsea una línea FL de forma optimizada"""
-        try:
-            parts = line.split()
-            
-            # Extraer campos básicos
-            wh_code = parts[1] if len(parts) > 1 else ""
-            packing_slip = parts[2] if len(parts) > 2 else ""
-            
-            # Buscar fechas de forma más precisa
-            dates = []
-            for part in parts:
-                if re.match(r'\d{1,2}/\d{1,2}/\d{4}', part):
-                    dates.append(part)
-            
-            return_date = dates[0] if len(dates) > 0 else None
-            invoice_date = dates[1] if len(dates) > 1 else None
-            counted_date = dates[2] if len(dates) > 2 else None
-            
-            # Extraer nombre del cliente de forma más inteligente
-            customer_name = self._extract_customer_name(parts, dates)
-            
-            # Determinar estado definitivo
-            definitive_dev = self._extract_definitive_status(line, parts)
-            
-            # Extraer números de tablillas
-            numbers = self._extract_numbers(parts)
-            
-            total_tablets = numbers[-4] if len(numbers) >= 4 else 0
-            open_tablets = numbers[-3] if len(numbers) >= 3 else 0
-            counting_delay = numbers[-2] if len(numbers) >= 2 else 0
-            validation_delay = numbers[-1] if len(numbers) >= 1 else 0
-            
-            return {
-                'WH_Code': wh_code,
-                'Return_Packing_Slip': packing_slip,
-                'Return_Date': self._parse_date(return_date),
-                'Invoice_Start_Date': self._parse_date(invoice_date),
-                'Customer_Name': customer_name,
-                'Job_Site_Name': customer_name,
-                'Definitive_Dev': definitive_dev,
-                'Counted_Date': self._parse_date(counted_date),
-                'Tablets': f"{total_tablets},{open_tablets}",
-                'Total_Tablets': total_tablets,
-                'Open_Tablets': open_tablets,
-                'Total_Open': open_tablets,
-                'Counting_Delay': counting_delay,
-                'Validation_Delay': validation_delay
-            }
-            
-        except Exception as e:
-            if line_num <= 5:  # Solo mostrar errores de las primeras 5 líneas
-                st.write(f"⚠️ Error en línea {line_num}: {str(e)}")
-            return None
-    
-    def _extract_customer_name(self, parts: List[str], dates: List[str]) -> str:
-        """Extrae el nombre del cliente de forma inteligente"""
-        # Encontrar la posición después de la última fecha
-        last_date_pos = -1
-        for i, part in enumerate(parts):
-            if re.match(r'\d{1,2}/\d{1,2}/\d{4}', part):
-                last_date_pos = i
-        
-        if last_date_pos == -1:
-            return ""
-        
-        # Extraer texto hasta encontrar Yes/No o números
-        customer_parts = []
-        for i in range(last_date_pos + 1, len(parts)):
-            part = parts[i]
-            if part in ['Yes', 'No', 'Ye', 's'] or part.isdigit():
-                break
-            customer_parts.append(part)
-        
-        return ' '.join(customer_parts).strip()
-    
-    def _extract_definitive_status(self, line: str, parts: List[str]) -> str:
-        """Extrae el estado definitivo de forma inteligente"""
-        # Buscar "Yes" o "Ye s" (puede estar dividido)
-        if 'Yes' in line or 'Ye s' in line:
-            return "Yes"
-        
-        # Buscar "No"
-        if 'No' in line:
-            return "No"
-        
-        # Buscar "Ye" seguido de "s" en partes separadas
-        for i, part in enumerate(parts):
-            if part == 'Ye' and i + 1 < len(parts) and parts[i + 1] == 's':
-                return "Yes"
-        
-        return "No"
-    
-    def _extract_numbers(self, parts: List[str]) -> List[int]:
-        """Extrae números de forma inteligente"""
-        numbers = []
-        for part in parts:
-            if part.isdigit():
-                numbers.append(int(part))
-        return numbers
-    
-    def _parse_date(self, date_str: str) -> Optional[pd.Timestamp]:
-        """Parsea fecha de forma segura"""
-        if not date_str:
-            return None
-        try:
-            return pd.to_datetime(date_str, format='%m/%d/%Y')
-        except:
-            return None
-    
-    def _clean_and_standardize(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Limpia y estandariza los datos"""
+    def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Limpieza y estandarización avanzada"""
         try:
             # Eliminar filas completamente vacías
             df = df.dropna(how='all').reset_index(drop=True)
@@ -255,34 +426,37 @@ class TablillasExtractor:
             if num_cols >= len(self.expected_columns):
                 df.columns = self.expected_columns[:num_cols]
             else:
+                # Usar los nombres que tenemos y completar con genéricos
                 column_names = self.expected_columns[:num_cols]
                 df.columns = column_names
             
-            # Limpiar datos
-            df = self._clean_data_types(df)
+            # Limpiar tipos de datos
+            df = self._clean_data_types_advanced(df)
             
-            # Calcular métricas adicionales
-            df = self._calculate_metrics(df)
+            # Calcular métricas avanzadas
+            df = self._calculate_advanced_metrics(df)
             
-            st.success(f"✅ Datos procesados: {len(df)} registros válidos")
+            st.success(f"✅ Datos procesados correctamente: {len(df)} registros válidos")
             return df
             
         except Exception as e:
             st.error(f"❌ Error limpiando datos: {str(e)}")
             return df
     
-    def _clean_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Limpia tipos de datos"""
-        # Fechas
+    def _clean_data_types_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Limpieza avanzada de tipos de datos"""
+        # Limpiar fechas con manejo robusto de errores
         date_columns = ['Return_Date', 'Invoice_Start_Date', 'Invoice_End_Date', 'Counted_Date']
         for col in date_columns:
             if col in df.columns:
+                # Convertir a datetime con manejo de errores
                 df[col] = pd.to_datetime(df[col], errors='coerce')
         
-        # Números
+        # Limpiar números con validación
         numeric_columns = ['Total_Tablets', 'Total_Open', 'Counting_Delay', 'Validation_Delay']
         for col in numeric_columns:
             if col in df.columns:
+                # Convertir a numérico, rellenar NaN con 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
         # Limpiar strings
@@ -293,249 +467,106 @@ class TablillasExtractor:
         
         return df
     
-    def _calculate_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calcula métricas adicionales"""
+    def _calculate_advanced_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calcular métricas avanzadas para análisis"""
         try:
+            current_date = pd.Timestamp.now()
+            
+            # Inicializar columnas con valores por defecto si no existen
+            if 'Days_Since_Return' not in df.columns:
+                df['Days_Since_Return'] = 0
+            
+            if 'Slip_Age_Rank' not in df.columns:
+                df['Slip_Age_Rank'] = 0
+            
             # Días desde retorno
             if 'Return_Date' in df.columns:
-                current_date = pd.Timestamp.now()
-                df['Days_Since_Return'] = (current_date - df['Return_Date']).dt.days
-                df['Days_Since_Return'] = df['Days_Since_Return'].fillna(0)
+                try:
+                    df['Days_Since_Return'] = (current_date - df['Return_Date']).dt.days
+                    df['Days_Since_Return'] = df['Days_Since_Return'].fillna(0)
+                except Exception as e:
+                    st.warning(f"⚠️ Error calculando días desde retorno: {str(e)}")
+                    df['Days_Since_Return'] = 0
             
-            # Score de prioridad
+            # Antigüedad del albarán basada en número correlativo
+            if 'Return_Packing_Slip' in df.columns:
+                try:
+                    # Extraer números del albarán para determinar antigüedad
+                    df['Slip_Number'] = df['Return_Packing_Slip'].str.extract(r'(\d+)', expand=False).astype(float)
+                    max_slip = df['Slip_Number'].max()
+                    if pd.notna(max_slip) and max_slip > 0:
+                        df['Slip_Age_Rank'] = (max_slip - df['Slip_Number']) / max_slip * 100
+                    else:
+                        df['Slip_Age_Rank'] = 0
+                except Exception as e:
+                    st.warning(f"⚠️ Error calculando antigüedad de albarán: {str(e)}")
+                    df['Slip_Age_Rank'] = 0
+            
+            # Asegurar que las columnas numéricas existen
+            for col in ['Counting_Delay', 'Validation_Delay', 'Total_Open']:
+                if col not in df.columns:
+                    df[col] = 0
+                else:
+                    # Asegurar que son numéricas
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
+            # Score de prioridad mejorado
             df['Priority_Score'] = (
-                df.get('Days_Since_Return', 0) * 0.4 +
-                df.get('Counting_Delay', 0) * 0.3 +
-                df.get('Validation_Delay', 0) * 0.2 +
-                df.get('Total_Open', 0) * 0.1
+                pd.to_numeric(df['Days_Since_Return'], errors='coerce').fillna(0) * 0.3 +
+                pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0) * 0.25 +
+                pd.to_numeric(df['Validation_Delay'], errors='coerce').fillna(0) * 0.2 +
+                pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0) * 0.15 +
+                pd.to_numeric(df['Slip_Age_Rank'], errors='coerce').fillna(0) * 0.1
             )
             
-            # Nivel de prioridad
-            df['Priority_Level'] = pd.cut(
-                df['Priority_Score'],
-                bins=[0, 15, 25, float('inf')],
-                labels=['Baja', 'Media', 'Alta'],
-                right=False
-            )
+            # Asegurar que Priority_Score es numérico
+            df['Priority_Score'] = pd.to_numeric(df['Priority_Score'], errors='coerce').fillna(0)
             
+            # Niveles de prioridad más granulares
+            try:
+                df['Priority_Level'] = pd.cut(
+                    df['Priority_Score'],
+                    bins=[0, 10, 20, 35, float('inf')],
+                    labels=['Baja', 'Media', 'Alta', 'Crítica'],
+                    right=False
+                ).astype(str)
+            except Exception as e:
+                st.warning(f"⚠️ Error asignando niveles de prioridad: {str(e)}")
+                df['Priority_Level'] = 'Baja'
+            
+            # Categoría de urgencia visual
+            try:
+                df['Urgency_Category'] = '⚪ SIN DATOS'
+                
+                # Condiciones para urgencia
+                urgent_mask = (df['Priority_Score'] >= 35) | (df['Days_Since_Return'] >= 30)
+                attention_mask = (df['Priority_Score'] >= 20) | (df['Days_Since_Return'] >= 15)
+                normal_mask = (df['Priority_Score'] >= 10) | (df['Days_Since_Return'] >= 7)
+                
+                df.loc[normal_mask, 'Urgency_Category'] = '🟢 NORMAL'
+                df.loc[attention_mask, 'Urgency_Category'] = '🟡 ATENCIÓN'
+                df.loc[urgent_mask, 'Urgency_Category'] = '🔴 URGENTE'
+                
+            except Exception as e:
+                st.warning(f"⚠️ Error asignando categorías de urgencia: {str(e)}")
+                df['Urgency_Category'] = '⚪ SIN DATOS'
+            
+            st.info(f"✅ Métricas calculadas correctamente. Priority_Score: min={df['Priority_Score'].min():.2f}, max={df['Priority_Score'].max():.2f}")
             return df
             
         except Exception as e:
-            st.warning(f"⚠️ Error calculando métricas: {str(e)}")
+            st.error(f"❌ Error general calculando métricas: {str(e)}")
+            # En caso de error, asegurar que las columnas básicas existen
+            if 'Priority_Score' not in df.columns:
+                df['Priority_Score'] = 0
+            if 'Priority_Level' not in df.columns:
+                df['Priority_Level'] = 'Baja'
+            if 'Urgency_Category' not in df.columns:
+                df['Urgency_Category'] = '⚪ SIN DATOS'
             return df
 
-def main():
-    # Header
-    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co.</h1><p>Extracción optimizada con pdfplumber - Carga Rápida</p></div>', 
-                unsafe_allow_html=True)
-    
-    # Mostrar estado de dependencias
-    if PDFPLUMBER_AVAILABLE:
-        st.markdown("""
-        <div class="success-box">
-        <h3>📄 ✅ pdfplumber Disponible</h3>
-        <p>Usando extracción optimizada y rápida de PDFs</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="error-box">
-        <h3>❌ pdfplumber no está disponible</h3>
-        <p>Instala la dependencia:</p>
-        <code>pip install pdfplumber</code>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-    
-    # Sidebar
-    st.sidebar.header("📂 Cargar PDF")
-    
-    uploaded_file = st.sidebar.file_uploader(
-        "Seleccionar archivo PDF",
-        type=['pdf'],
-        help="Sube el reporte de Outstanding Count Returns"
-    )
-    
-    if uploaded_file is not None:
-        st.markdown('<div class="warning-box">🔄 <strong>Procesando PDF...</strong></div>', 
-                    unsafe_allow_html=True)
-        
-        # Extraer datos
-        extractor = TablillasExtractor()
-        df = extractor.extract_from_pdf(uploaded_file)
-        
-        if df is not None and not df.empty:
-            st.markdown('<div class="success-box">✅ <strong>Extracción exitosa!</strong></div>', 
-                        unsafe_allow_html=True)
-            
-            # Mostrar dashboard
-            show_dashboard(df)
-        else:
-            st.markdown("""
-            <div class="error-box">
-            <h3>❌ No se pudieron extraer datos</h3>
-            <p>Posibles soluciones:</p>
-            <ul>
-                <li>Verificar que el PDF contenga líneas que empiecen con 'FL'</li>
-                <li>Asegurar que el archivo no esté protegido</li>
-                <li>Comprobar que el formato sea el esperado</li>
-            </ul>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    else:
-        # Instrucciones
-        st.markdown("""
-        ## 📋 Instrucciones de Uso
-        
-        1. **Subir PDF**: Usar el panel lateral para cargar el archivo
-        
-        2. **Automático**: La aplicación extraerá los datos automáticamente
-        
-        3. **Verificar**: Revisar los datos extraídos en el dashboard
-        
-        4. **Descargar**: Exportar a Excel para análisis adicional
-        
-        ### 🎯 Extracción Optimizada
-        - **pdfplumber**: Extracción rápida y confiable
-        - **Validación inteligente**: Verifica líneas FL válidas
-        - **Procesamiento optimizado**: Maneja datos complejos
-        - **Carga rápida**: Sin dependencias pesadas
-        
-        ### 📊 Datos Extraídos
-        - Código de almacén (WH_Code)
-        - Número de packing slip
-        - Fechas de devolución
-        - Nombre del cliente
-        - Estado definitivo (Yes/No)
-        - Números de tablillas
-        - Delays de conteo y validación
-        """)
-
-def show_dashboard(df: pd.DataFrame):
-    """Dashboard principal"""
-    st.header("📊 Dashboard - Datos Extraídos")
-    
-    # Métricas principales
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Albaranes", len(df))
-    
-    with col2:
-        total_open = int(df.get('Total_Open', pd.Series([0])).sum())
-        st.metric("Tablillas Pendientes", total_open)
-    
-    with col3:
-        avg_delay = df.get('Counting_Delay', pd.Series([0])).mean()
-        st.metric("Retraso Promedio", f"{avg_delay:.1f} días")
-    
-    with col4:
-        warehouses = df.get('WH_Code', pd.Series([''])).nunique()
-        st.metric("Almacenes", warehouses)
-    
-    # Tabla principal
-    st.subheader("📋 Datos Detallados")
-    
-    # Mostrar columnas principales
-    main_columns = [
-        'Return_Packing_Slip', 'Return_Date', 'Customer_Name', 'Job_Site_Name',
-        'Definitive_Dev', 'Counted_Date', 'Tablets', 'Total_Tablets', 
-        'Open_Tablets', 'Total_Open', 'Days_Since_Return', 'Priority_Level'
-    ]
-    
-    available_columns = [col for col in main_columns if col in df.columns]
-    
-    if available_columns:
-        st.dataframe(df[available_columns], use_container_width=True)
-    else:
-        st.dataframe(df, use_container_width=True)
-    
-    # Gráficos si hay datos suficientes
-    if len(df) > 0 and 'Priority_Level' in df.columns:
-        show_charts(df)
-    
-    # Descarga
-    st.subheader("💾 Exportar Datos")
-    if st.button("📥 Descargar Excel", type="primary"):
-        download_excel(df)
-
-def show_charts(df: pd.DataFrame):
-    """Mostrar gráficos"""
-    st.subheader("📈 Visualizaciones")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'WH_Code' in df.columns and 'Priority_Level' in df.columns:
-            priority_data = df.groupby(['WH_Code', 'Priority_Level']).size().reset_index(name='count')
-            
-            if not priority_data.empty:
-                fig1 = px.bar(
-                    priority_data,
-                    x='WH_Code',
-                    y='count',
-                    color='Priority_Level',
-                    color_discrete_map={'Alta': '#dc3545', 'Media': '#fd7e14', 'Baja': '#28a745'},
-                    title="Prioridades por Almacén"
-                )
-                st.plotly_chart(fig1, use_container_width=True)
-    
-    with col2:
-        if 'Return_Date' in df.columns:
-            timeline = df.groupby('Return_Date').size().reset_index(name='count')
-            
-            if not timeline.empty:
-                fig2 = px.line(
-                    timeline,
-                    x='Return_Date',
-                    y='count',
-                    title="Devoluciones por Fecha",
-                    markers=True
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-
-def download_excel(df: pd.DataFrame):
-    """Generar y descargar Excel"""
-    output = io.BytesIO()
-    
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Hoja principal
-            df.to_excel(writer, sheet_name='Datos_Extraidos', index=False)
-            
-            # Hoja de resumen por almacén
-            if 'WH_Code' in df.columns:
-                summary = df.groupby('WH_Code').agg({
-                    'Total_Open': 'sum',
-                    'Total_Tablets': 'sum',
-                    'Counting_Delay': 'mean',
-                    'Return_Packing_Slip': 'count'
-                }).round(2)
-                summary.columns = ['Tablillas_Abiertas', 'Total_Tablillas', 'Retraso_Promedio', 'Num_Albaranes']
-                summary.to_excel(writer, sheet_name='Resumen_Almacenes')
-            
-            # Hoja de alta prioridad
-            if 'Priority_Level' in df.columns:
-                high_priority = df[df['Priority_Level'] == 'Alta']
-                if not high_priority.empty:
-                    high_priority.to_excel(writer, sheet_name='Alta_Prioridad', index=False)
-        
-        # Botón de descarga
-        current_date = datetime.now().strftime('%Y%m%d_%H%M')
-        filename = f"tablillas_{current_date}.xlsx"
-        
-        st.download_button(
-            label="📥 Descargar Excel Completo",
-            data=output.getvalue(),
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
-        st.success(f"✅ Excel generado: **{filename}**")
-        
-    except Exception as e:
-        st.error(f"❌ Error generando Excel: {str(e)}")
+# Importar funciones principales
+from functions import main, show_pdf_processing_tab, show_excel_analysis_tab
 
 if __name__ == "__main__":
     main()
