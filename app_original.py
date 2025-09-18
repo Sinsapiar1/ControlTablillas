@@ -226,8 +226,17 @@ class ExcelAnalyzer:
             
             # Calcular cambios
             new_albaranes = current_albaranes - previous_albaranes
-            closed_albaranes = previous_albaranes - current_albaranes
             continuing_albaranes = current_albaranes.intersection(previous_albaranes)
+            
+            # CORREGIDO: Albaranes cerrados son los que tienen Total_Open = 0 en el archivo actual
+            # No los que desaparecen del archivo
+            closed_albaranes = set()
+            for albaran in current_albaranes:
+                albaran_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
+                if not albaran_row.empty:
+                    total_open = pd.to_numeric(albaran_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                    if total_open == 0:
+                        closed_albaranes.add(albaran)
             
             # Análisis detallado de cambios en albaranes
             closed_tablets = 0
