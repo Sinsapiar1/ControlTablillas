@@ -2107,12 +2107,11 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
         return b''
 
 def export_comprehensive_trends_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
-    """Exportar análisis completo de tendencias"""
+    """Exportar análisis completo de tendencias - VERSIÓN CORREGIDA"""
     st.info("🔄 Generando análisis completo de tendencias...")
     
-    # Esta función puede expandirse para análisis más profundos
-    # Por ahora, usar la función principal con datos adicionales
-    export_professional_multi_day_report(analysis_results, excel_data)
+    # NUEVO: Devolver los datos binarios de la función principal
+    return export_professional_multi_day_report(analysis_results, excel_data)
 
 def show_extraction_error():
     """Mostrar error de extracción con soluciones"""
