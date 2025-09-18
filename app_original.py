@@ -164,47 +164,65 @@ class ExcelAnalyzer:
         return excel_data
     
     def compare_excel_files(self, excel_data: Dict[str, pd.DataFrame]) -> Dict:
-        """Comparar datos entre archivos Excel"""
+        """Comparar datos entre archivos Excel - VERSIÓN MEJORADA"""
         if len(excel_data) < 2:
             return {"error": "Se necesitan al menos 2 archivos para comparar"}
         
-        # Ordenar por fecha
-        sorted_dates = sorted(excel_data.keys())
-        
-        comparisons = []
-        
-        for i in range(1, len(sorted_dates)):
-            current_date = sorted_dates[i]
-            previous_date = sorted_dates[i-1]
+        try:
+            # Ordenar por fecha
+            sorted_dates = sorted(excel_data.keys())
+            st.write(f"📊 Analizando fechas: {sorted_dates}")
             
-            current_df = excel_data[current_date]
-            previous_df = excel_data[previous_date]
+            comparisons = []
             
-            comparison = self.compare_two_dataframes(
-                current_df, previous_df, current_date, previous_date
-            )
-            comparisons.append(comparison)
-        
-        # Resumen general
-        summary = self.create_comparison_summary(comparisons, excel_data)
-        
-        return {
-            "comparisons": comparisons,
-            "summary": summary,
-            "dates": sorted_dates
-        }
+            for i in range(1, len(sorted_dates)):
+                current_date = sorted_dates[i]
+                previous_date = sorted_dates[i-1]
+                
+                current_df = excel_data[current_date]
+                previous_df = excel_data[previous_date]
+                
+                st.write(f"🔍 Comparando {previous_date} ({len(previous_df)} filas) vs {current_date} ({len(current_df)} filas)")
+                
+                comparison = self.compare_two_dataframes(
+                    current_df, previous_df, current_date, previous_date
+                )
+                comparisons.append(comparison)
+            
+            # Resumen general
+            summary = self.create_comparison_summary(comparisons, excel_data)
+            
+            return {
+                "comparisons": comparisons,
+                "summary": summary,
+                "dates": sorted_dates
+            }
+            
+        except Exception as e:
+            st.error(f"❌ Error en análisis comparativo: {str(e)}")
+            return {"error": f"Error en análisis: {str(e)}"}
     
     def compare_two_dataframes(self, current_df: pd.DataFrame, previous_df: pd.DataFrame, 
                               current_date: str, previous_date: str) -> Dict:
-        """Comparar dos DataFrames específicos"""
+        """Comparar dos DataFrames específicos - VERSIÓN ROBUSTA"""
         
-        # Normalizar nombres de columnas para la comparación
-        current_df = self.normalize_dataframe(current_df)
-        previous_df = self.normalize_dataframe(previous_df)
-        
-        # Albaranes actuales y anteriores
-        current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
-        previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
+        try:
+            # Normalizar nombres de columnas para la comparación
+            current_df = self.normalize_dataframe(current_df)
+            previous_df = self.normalize_dataframe(previous_df)
+            
+            # Verificar que tenemos las columnas necesarias
+            if 'Return_Packing_Slip' not in current_df.columns:
+                st.warning(f"⚠️ {current_date}: No se encontró columna Return_Packing_Slip")
+                return self._create_empty_comparison(current_date, previous_date)
+            
+            if 'Return_Packing_Slip' not in previous_df.columns:
+                st.warning(f"⚠️ {previous_date}: No se encontró columna Return_Packing_Slip")
+                return self._create_empty_comparison(current_date, previous_date)
+            
+            # Albaranes actuales y anteriores
+            current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
+            previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
         
         # Calcular cambios
         new_albaranes = current_albaranes - previous_albaranes
@@ -280,57 +298,90 @@ class ExcelAnalyzer:
             'previous_total_albaranes': len(previous_df),
             'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])  # NUEVO
         }
+        
+        except Exception as e:
+            st.error(f"❌ Error comparando {previous_date} vs {current_date}: {str(e)}")
+            return self._create_empty_comparison(current_date, previous_date)
+    
+    def _create_empty_comparison(self, current_date: str, previous_date: str) -> Dict:
+        """Crear comparación vacía en caso de error"""
+        return {
+            'current_date': current_date,
+            'previous_date': previous_date,
+            'new_albaranes': 0,
+            'closed_albaranes': 0,
+            'closed_tablets': 0,
+            'added_tablets': 0,
+            'new_albaranes_list': [],
+            'closed_albaranes_list': [],
+            'changed_albaranes': [],
+            'current_total_open': 0,
+            'previous_total_open': 0,
+            'current_total_albaranes': 0,
+            'previous_total_albaranes': 0,
+            'albaranes_with_added_tablets': 0
+        }
     
     def normalize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalizar DataFrame para comparación"""
-        # Asegurar que las columnas principales existen
-        required_columns = ['Return_Packing_Slip', 'Total_Open', 'Customer_Name']
-        
-        for col in required_columns:
-            if col not in df.columns:
-                # Buscar columnas similares
-                similar_cols = [c for c in df.columns if col.lower() in c.lower() or c.lower() in col.lower()]
-                if similar_cols:
-                    df[col] = df[similar_cols[0]]
-                else:
-                    df[col] = 0 if 'Total' in col else 'N/A'
-        
-        return df
+        """Normalizar DataFrame para comparación - VERSIÓN ROBUSTA"""
+        try:
+            # Asegurar que las columnas principales existen
+            required_columns = ['Return_Packing_Slip', 'Total_Open', 'Customer_Name']
+            
+            for col in required_columns:
+                if col not in df.columns:
+                    # Buscar columnas similares
+                    similar_cols = [c for c in df.columns if col.lower() in c.lower() or c.lower() in col.lower()]
+                    if similar_cols:
+                        df[col] = df[similar_cols[0]]
+                        st.info(f"🔄 Usando '{similar_cols[0]}' como '{col}'")
+                    else:
+                        df[col] = 0 if 'Total' in col else 'N/A'
+                        st.warning(f"⚠️ Columna '{col}' no encontrada, usando valor por defecto")
+            
+            return df
+        except Exception as e:
+            st.error(f"❌ Error normalizando DataFrame: {str(e)}")
+            return df
     
     def create_comparison_summary(self, comparisons: List[Dict], excel_data: Dict[str, pd.DataFrame]) -> Dict:
-        """Crear resumen de todas las comparaciones"""
-        if not comparisons:
+        """Crear resumen de todas las comparaciones - VERSIÓN ROBUSTA"""
+        try:
+            if not comparisons:
+                return {}
+            
+            total_new_albaranes = sum(c['new_albaranes'] for c in comparisons)
+            total_closed_albaranes = sum(c['closed_albaranes'] for c in comparisons)
+            total_closed_tablets = sum(c['closed_tablets'] for c in comparisons)
+            total_added_tablets = sum(c.get('added_tablets', 0) for c in comparisons)
+            
+            # Análisis de tendencias
+            dates = sorted(excel_data.keys())
+            
+            # Evolución de tablillas pendientes
+            open_evolution = []
+            for date in dates:
+                df = excel_data[date]
+                if 'Total_Open' in df.columns:
+                    total_open = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum()
+                else:
+                    total_open = 0
+                open_evolution.append({'date': date, 'total_open': total_open})
+            
+            return {
+                'total_new_albaranes': total_new_albaranes,
+                'total_closed_albaranes': total_closed_albaranes,
+                'total_closed_tablets': total_closed_tablets,
+                'total_added_tablets': total_added_tablets,
+                'analysis_period': f"{dates[0]} a {dates[-1]}" if len(dates) >= 2 else dates[0],
+                'open_evolution': open_evolution,
+                'num_files_analyzed': len(excel_data),
+                'most_recent_date': dates[-1] if dates else None,
+                'oldest_date': dates[0] if dates else None
+            }
+        except Exception as e:
+            st.error(f"❌ Error creando resumen: {str(e)}")
             return {}
-        
-        total_new_albaranes = sum(c['new_albaranes'] for c in comparisons)
-        total_closed_albaranes = sum(c['closed_albaranes'] for c in comparisons)
-        total_closed_tablets = sum(c['closed_tablets'] for c in comparisons)
-        total_added_tablets = sum(c.get('added_tablets', 0) for c in comparisons)  # NUEVO
-        
-        # Análisis de tendencias
-        dates = sorted(excel_data.keys())
-        
-        # Evolución de tablillas pendientes
-        open_evolution = []
-        for date in dates:
-            df = excel_data[date]
-            if 'Total_Open' in df.columns:
-                total_open = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum()
-            else:
-                total_open = 0
-            open_evolution.append({'date': date, 'total_open': total_open})
-        
-        return {
-            'total_new_albaranes': total_new_albaranes,
-            'total_closed_albaranes': total_closed_albaranes,
-            'total_closed_tablets': total_closed_tablets,
-            'total_added_tablets': total_added_tablets,  # NUEVO
-            'analysis_period': f"{dates[0]} a {dates[-1]}" if len(dates) >= 2 else dates[0],
-            'open_evolution': open_evolution,
-            'num_files_analyzed': len(excel_data),
-            'most_recent_date': dates[-1] if dates else None,
-            'oldest_date': dates[0] if dates else None
-        }
 
 class TablillasExtractorPro:
     """Extractor profesional mejorado"""
@@ -939,16 +990,16 @@ def create_comprehensive_excel(df: pd.DataFrame) -> bytes:
         return b''
 
 def show_excel_analysis_tab():
-    """Pestaña para análisis multi-Excel"""
+    """Pestaña para análisis multi-Excel - VERSIÓN CORREGIDA"""
     st.markdown('<div class="section-header">📊 ANÁLISIS MULTI-EXCEL</div>', 
                 unsafe_allow_html=True)
     
     st.markdown("""
-    ### 🔄 Cargar múltiples archivos Excel para análisis comparativo
+    ### 📄 Cargar múltiples archivos Excel para análisis comparativo
     
     Sube **2 o más archivos Excel** generados en días diferentes para:
     - 📈 Ver tendencias y evolución
-    - 🔄 Detectar cambios día a día  
+    - 📄 Detectar cambios día a día  
     - 📊 Analizar performance histórica
     - 🎯 Identificar patrones
     """)
@@ -962,28 +1013,19 @@ def show_excel_analysis_tab():
     )
     
     if uploaded_excel_files and len(uploaded_excel_files) >= 2:
-        # Procesar archivos Excel
+        st.info(f"📂 {len(uploaded_excel_files)} archivos seleccionados. Procesando...")
+        
+        # NUEVA FUNCIÓN - Procesar directamente sin archivos temporales
         analyzer = ExcelAnalyzer()
-        
-        # Guardar archivos temporalmente y cargarlos
-        temp_files = []
-        for uploaded_file in uploaded_excel_files:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                tmp_file.write(uploaded_file.read())
-                temp_files.append(tmp_file.name)
-        
-        # Cargar datos de Excel
-        excel_data = analyzer.load_excel_files(temp_files)
-        
-        # Limpiar archivos temporales
-        for temp_file in temp_files:
-            try:
-                os.unlink(temp_file)
-            except:
-                pass
+        excel_data = load_excel_files_direct(uploaded_excel_files)
         
         if len(excel_data) >= 2:
             st.success(f"✅ {len(excel_data)} archivos cargados correctamente")
+            
+            # Mostrar información de archivos cargados
+            st.write("**Archivos procesados:**")
+            for date, df in excel_data.items():
+                st.write(f"- **{date}**: {len(df)} albaranes, {df['Total_Open'].sum() if 'Total_Open' in df.columns else 0} tablillas pendientes")
             
             # Realizar análisis comparativo
             analysis_results = analyzer.compare_excel_files(excel_data)
@@ -991,7 +1033,7 @@ def show_excel_analysis_tab():
             if "error" not in analysis_results:
                 show_comparative_analysis(analysis_results, excel_data)
                 
-                # NUEVA: Opción de exportar informe profesional
+                # Opción de exportar informe profesional
                 st.markdown('<div class="section-header">💾 EXPORTAR INFORME PROFESIONAL</div>', 
                             unsafe_allow_html=True)
                 
@@ -1013,6 +1055,78 @@ def show_excel_analysis_tab():
     
     else:
         st.info("📂 Selecciona múltiples archivos Excel para comenzar el análisis")
+
+def load_excel_files_direct(uploaded_files) -> Dict[str, pd.DataFrame]:
+    """Cargar archivos Excel directamente sin archivos temporales - NUEVA FUNCIÓN"""
+    excel_data = {}
+    
+    for uploaded_file in uploaded_files:
+        try:
+            st.write(f"🔍 Procesando: {uploaded_file.name}")
+            
+            # Leer directamente del objeto UploadedFile
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+            
+            st.write(f"✅ Leído correctamente: {len(df)} filas, {len(df.columns)} columnas")
+            
+            # Extraer fecha del nombre del archivo
+            file_name = uploaded_file.name
+            
+            # Intentar extraer fecha del nombre (formato: tablillas_YYYYMMDD_HHMM.xlsx)
+            date_match = re.search(r'(\d{8})_(\d{4})', file_name)
+            if date_match:
+                date_str = date_match.group(1)
+                file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                st.write(f"📅 Fecha extraída: {file_date}")
+            else:
+                # Usar timestamp actual como fallback
+                file_date = datetime.now().strftime('%Y-%m-%d_%H%M')
+                st.write(f"📅 Usando fecha actual: {file_date}")
+            
+            # Verificar que el DataFrame tiene las columnas esperadas
+            if 'Return_Packing_Slip' in df.columns or 'WH_Code' in df.columns:
+                excel_data[file_date] = df
+                st.success(f"✅ {file_name} cargado como {file_date}")
+            else:
+                st.warning(f"⚠️ {file_name} no parece tener el formato esperado")
+                
+                # Mostrar columnas disponibles para debug
+                st.write(f"Columnas disponibles: {list(df.columns[:10])}")  # Mostrar solo las primeras 10
+                
+                # Intentar cargar de todos modos
+                excel_data[file_date] = df
+                st.info(f"ℹ️ Cargado de todos modos para análisis")
+                
+        except Exception as e:
+            st.error(f"❌ Error cargando {uploaded_file.name}: {str(e)}")
+            
+            # Información adicional para debug
+            st.write(f"Tipo de archivo: {type(uploaded_file)}")
+            st.write(f"Tamaño: {uploaded_file.size} bytes")
+            
+            # Intentar con otro engine
+            try:
+                st.write("🔄 Intentando con engine alternativo...")
+                uploaded_file.seek(0)  # Reset file pointer
+                df = pd.read_excel(uploaded_file, engine='xlrd')
+                
+                # Extraer fecha
+                file_name = uploaded_file.name
+                date_match = re.search(r'(\d{8})_(\d{4})', file_name)
+                if date_match:
+                    date_str = date_match.group(1)
+                    file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                else:
+                    file_date = datetime.now().strftime('%Y-%m-%d_%H%M')
+                
+                excel_data[file_date] = df
+                st.success(f"✅ {file_name} cargado con engine alternativo")
+                
+            except Exception as e2:
+                st.error(f"❌ Error también con engine alternativo: {str(e2)}")
+                continue
+    
+    return excel_data
 
 def show_comparative_analysis(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
     """Mostrar análisis comparativo completo"""
