@@ -243,6 +243,26 @@ class ExcelAnalyzer:
             added_tablets = 0
             changed_albaranes = []
             
+            # CORREGIDO: Contar tablillas de albaranes nuevos
+            for albaran in new_albaranes:
+                albaran_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
+                if not albaran_row.empty:
+                    total_tablets = pd.to_numeric(albaran_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                    added_tablets += total_tablets
+                    
+                    # Agregar información del albarán nuevo
+                    change_info = {
+                        'albaran': albaran,
+                        'customer': albaran_row.iloc[0].get('Customer_Name', 'N/A'),
+                        'previous_open': 0,
+                        'current_open': pd.to_numeric(albaran_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0,
+                        'previous_total': 0,
+                        'current_total': total_tablets,
+                        'changes': [f"🆕 Albarán nuevo con {total_tablets} tablillas"]
+                    }
+                    changed_albaranes.append(change_info)
+            
+            # Analizar cambios en albaranes que continúan
             for albaran in continuing_albaranes:
                 current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
                 previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
