@@ -42,6 +42,32 @@ st.markdown("""
         opacity: 1 !important;
     }
     
+    /* Forzar visibilidad de todos los elementos */
+    .main .block-container {
+        opacity: 1 !important;
+        background-color: #ffffff !important;
+    }
+    
+    /* Evitar transparencia en elementos específicos */
+    .stMarkdown, .stButton, .stDownloadButton {
+        opacity: 1 !important;
+    }
+    
+    /* Forzar visibilidad del contenido principal */
+    .stApp > div > div > div {
+        opacity: 1 !important;
+    }
+    
+    /* JavaScript para forzar visibilidad */
+    .stApp {
+        visibility: visible !important;
+    }
+    
+    /* Evitar que elementos se oculten */
+    .stApp * {
+        visibility: visible !important;
+    }
+    
     .main-header {
         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
         color: white;
@@ -801,6 +827,35 @@ def main():
     if 'pdf_filename' not in st.session_state:
         st.session_state['pdf_filename'] = None
     
+    # JavaScript para forzar visibilidad y evitar transparencia
+    st.markdown("""
+    <script>
+    // Forzar visibilidad de la aplicación
+    function forceVisibility() {
+        const app = document.querySelector('.stApp');
+        if (app) {
+            app.style.opacity = '1';
+            app.style.visibility = 'visible';
+            app.style.backgroundColor = '#ffffff';
+        }
+        
+        // Forzar visibilidad de todos los elementos
+        const allElements = document.querySelectorAll('.stApp *');
+        allElements.forEach(el => {
+            el.style.opacity = '1';
+            el.style.visibility = 'visible';
+        });
+    }
+    
+    // Ejecutar inmediatamente
+    forceVisibility();
+    
+    // Ejecutar después de cada cambio
+    const observer = new MutationObserver(forceVisibility);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+    """, unsafe_allow_html=True)
+    
     # Header profesional
     st.markdown('''
     <div class="main-header">
@@ -984,30 +1039,42 @@ def generate_daily_excel(df: pd.DataFrame):
     
     # NUEVO: Mostrar botón de descarga automáticamente si se generó Excel
     if st.session_state.get('pdf_excel_generated', False):
-        st.markdown('<div class="section-header">💾 DESCARGAR EXCEL GENERADO</div>', 
-                    unsafe_allow_html=True)
+        # Usar st.empty() para mantener el contenido visible
+        download_container = st.container()
         
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.success("✅ Excel listo para descargar")
-        
-        with col2:
-            st.download_button(
-                label="💾 Descargar Excel Completo",
-                data=st.session_state.get('pdf_excel_data'),
-                file_name=st.session_state.get('pdf_filename', 'tablillas_procesadas.xlsx'),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
+        with download_container:
+            st.markdown('<div class="section-header">💾 DESCARGAR EXCEL GENERADO</div>', 
+                        unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.success("✅ Excel listo para descargar")
+            
+            with col2:
+                st.download_button(
+                    label="💾 Descargar Excel Completo",
+                    data=st.session_state.get('pdf_excel_data'),
+                    file_name=st.session_state.get('pdf_filename', 'tablillas_procesadas.xlsx'),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
     
     # Botón para limpiar estado y evitar problemas de transparencia
     if st.session_state.get('pdf_excel_generated', False):
-        if st.button("🔄 Limpiar Estado", help="Limpia el estado para evitar problemas de transparencia"):
-            st.session_state['pdf_excel_generated'] = False
-            st.session_state['pdf_excel_data'] = None
-            st.session_state['pdf_filename'] = None
-            st.rerun()
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            if st.button("🔄 Limpiar Estado", help="Limpia el estado para evitar problemas de transparencia"):
+                st.session_state['pdf_excel_generated'] = False
+                st.session_state['pdf_excel_data'] = None
+                st.session_state['pdf_filename'] = None
+                st.success("✅ Estado limpiado correctamente")
+        
+        with col2:
+            if st.button("🔄 Recargar Página", help="Recarga la página para limpiar completamente"):
+                st.session_state.clear()
+                st.experimental_rerun()
 
 def create_comprehensive_excel(df: pd.DataFrame) -> bytes:
     """Crear Excel completo con múltiples hojas"""
