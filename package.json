@@ -1,0 +1,17 @@
+{
+  "name": "control-tablillas-alsina",
+  "version": "1.0.0",
+  "description": "Sistema Profesional de Control de Tablillas - Alsina Forms Co.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "python app.py",
+    "start": "python app.py",
+    "build": "echo 'No build step required'"
+  },
+  "dependencies": {
+    "python": "^3.9.0"
+  },
+  "engines": {
+    "python": "3.9.x"
+  }
+}
