@@ -2,22 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "app.py",
+      "src": "vercel_streamlit.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "app.py"
+      "dest": "vercel_streamlit.py"
     }
   ],
   "env": {
     "PYTHONPATH": "/var/task"
   },
   "functions": {
-    "app.py": {
-      "maxDuration": 30
+    "vercel_streamlit.py": {
+      "maxDuration": 60
     }
   }
 }

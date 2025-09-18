@@ -2,10 +2,10 @@
   "name": "control-tablillas-alsina",
   "version": "1.0.0",
   "description": "Sistema Profesional de Control de Tablillas - Alsina Forms Co.",
-  "main": "index.js",
+  "main": "vercel_app.py",
   "scripts": {
-    "dev": "python app.py",
-    "start": "python app.py",
+    "dev": "streamlit run vercel_app.py",
+    "start": "streamlit run vercel_app.py",
     "build": "echo 'No build step required'"
   },
   "dependencies": {
