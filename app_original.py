@@ -691,6 +691,9 @@ def show_pdf_processing_tab():
             # Mostrar resumen de datos extraídos
             show_extraction_summary(df)
             
+            # NUEVO: Análisis visual profesional
+            show_visual_analysis_dashboard(df)
+            
             # Mostrar datos principales
             show_main_data_table(df)
             
@@ -910,6 +913,19 @@ def show_excel_analysis_tab():
             
             if "error" not in analysis_results:
                 show_comparative_analysis(analysis_results, excel_data)
+                
+                # NUEVA: Opción de exportar informe profesional
+                st.markdown('<div class="section-header">💾 EXPORTAR INFORME PROFESIONAL</div>', 
+                            unsafe_allow_html=True)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📊 Informe Ejecutivo Multi-Días", type="primary"):
+                        export_professional_multi_day_report(analysis_results, excel_data)
+                
+                with col2:
+                    if st.button("📈 Análisis Completo de Tendencias", type="secondary"):
+                        export_comprehensive_trends_report(analysis_results, excel_data)
             else:
                 st.error(analysis_results["error"])
         else:
@@ -932,6 +948,9 @@ def show_comparative_analysis(analysis_results: Dict, excel_data: Dict[str, pd.D
     
     # Comparaciones día a día
     show_daily_comparisons(analysis_results["comparisons"])
+    
+    # Análisis de tendencias
+    show_trend_analysis(excel_data)
 
 def show_analysis_summary(summary: Dict):
     """Mostrar resumen del análisis"""
@@ -1022,6 +1041,561 @@ def show_daily_comparisons(comparisons: List[Dict]):
             <small>{comparison.get('albaranes_with_added_tablets', 0)} albaranes</small>
             </div>
             ''', unsafe_allow_html=True)
+
+def show_visual_analysis_dashboard(df: pd.DataFrame):
+    """Dashboard visual profesional para análisis del día"""
+    st.markdown('<div class="section-header">📊 ANÁLISIS VISUAL PROFESIONAL</div>', 
+                unsafe_allow_html=True)
+    
+    # Verificar que tenemos datos para analizar
+    if df.empty:
+        st.warning("⚠️ No hay datos para analizar")
+        return
+    
+    # Análisis por almacén
+    show_warehouse_analysis(df)
+    
+    # Análisis de antigüedad
+    show_aging_analysis(df)
+    
+    # Análisis de eficiencia y performance
+    show_performance_analysis(df)
+
+def show_warehouse_analysis(df: pd.DataFrame):
+    """Análisis comparativo por almacén"""
+    st.subheader("🏢 Análisis por Almacén")
+    
+    if 'WH_Code' not in df.columns:
+        st.info("📋 No hay información de almacenes para analizar")
+        return
+    
+    # Preparar datos por almacén
+    wh_summary = df.groupby('WH_Code').agg({
+        'Total_Open': 'sum',
+        'Total_Tablets': 'sum',
+        'Counting_Delay': ['mean', 'max'],
+        'Validation_Delay': 'mean',
+        'Return_Packing_Slip': 'count',
+        'Days_Since_Return': 'mean',
+        'Priority_Score': 'mean'
+    }).round(2)
+    
+    # Aplanar columnas multinivel
+    wh_summary.columns = ['Pendientes', 'Total_Tablillas', 'Retraso_Prom', 'Retraso_Max', 
+                         'Val_Delay_Prom', 'Num_Albaranes', 'Días_Prom', 'Score_Prom']
+    wh_summary = wh_summary.reset_index()
+    
+    # Calcular métricas adicionales
+    wh_summary['Eficiencia'] = ((wh_summary['Total_Tablillas'] - wh_summary['Pendientes']) / 
+                               wh_summary['Total_Tablillas'] * 100).round(1)
+    wh_summary['Urgencia'] = (wh_summary['Días_Prom'] + wh_summary['Retraso_Prom']).round(1)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Gráfico de tablillas pendientes por almacén
+        fig1 = px.bar(
+            wh_summary,
+            x='WH_Code',
+            y='Pendientes',
+            title='📊 Tablillas Pendientes por Almacén',
+            color='Eficiencia',
+            color_continuous_scale='RdYlGn',
+            text='Pendientes',
+            hover_data=['Num_Albaranes', 'Retraso_Prom']
+        )
+        
+        fig1.update_traces(texttemplate='%{text}', textposition='outside')
+        fig1.update_layout(
+            xaxis_title="Almacén",
+            yaxis_title="Tablillas Pendientes",
+            showlegend=False
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        # Gráfico de eficiencia por almacén
+        fig2 = px.scatter(
+            wh_summary,
+            x='Retraso_Prom',
+            y='Eficiencia',
+            size='Num_Albaranes',
+            color='WH_Code',
+            title='🎯 Eficiencia vs Retraso por Almacén',
+            hover_data=['Pendientes', 'Total_Tablillas'],
+            size_max=60
+        )
+        
+        fig2.update_layout(
+            xaxis_title="Retraso Promedio (días)",
+            yaxis_title="Eficiencia (%)",
+            legend_title="Almacén"
+        )
+        
+        # Líneas de referencia
+        fig2.add_hline(y=80, line_dash="dash", line_color="green", 
+                      annotation_text="Meta Eficiencia 80%")
+        fig2.add_vline(x=10, line_dash="dash", line_color="red", 
+                      annotation_text="Límite Retraso 10 días")
+        
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # Tabla resumen por almacén
+    st.subheader("📋 Resumen Detallado por Almacén")
+    
+    # Colorear filas según performance
+    def color_efficiency(val):
+        if val >= 80:
+            return 'background-color: #d4edda'  # Verde
+        elif val >= 60:
+            return 'background-color: #fff3cd'  # Amarillo
+        else:
+            return 'background-color: #f8d7da'  # Rojo
+    
+    # Mostrar tabla con formato
+    styled_summary = wh_summary.style.applymap(
+        color_efficiency, subset=['Eficiencia']
+    ).format({
+        'Eficiencia': '{:.1f}%',
+        'Retraso_Prom': '{:.1f} días',
+        'Retraso_Max': '{:.1f} días',
+        'Días_Prom': '{:.1f} días',
+        'Score_Prom': '{:.2f}'
+    })
+    
+    st.dataframe(styled_summary, use_container_width=True)
+    
+    # Rankings de almacenes
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        best_efficiency = wh_summary.loc[wh_summary['Eficiencia'].idxmax()]
+        st.metric("🏆 Mejor Eficiencia", 
+                 f"{best_efficiency['WH_Code']}", 
+                 f"{best_efficiency['Eficiencia']:.1f}%")
+    
+    with col2:
+        worst_delay = wh_summary.loc[wh_summary['Retraso_Prom'].idxmax()]
+        st.metric("⚠️ Mayor Retraso", 
+                 f"{worst_delay['WH_Code']}", 
+                 f"{worst_delay['Retraso_Prom']:.1f} días")
+    
+    with col3:
+        most_pending = wh_summary.loc[wh_summary['Pendientes'].idxmax()]
+        st.metric("📊 Más Pendientes", 
+                 f"{most_pending['WH_Code']}", 
+                 f"{most_pending['Pendientes']} tablillas")
+
+def show_aging_analysis(df: pd.DataFrame):
+    """Análisis de antigüedad de albaranes"""
+    st.subheader("⏰ Análisis de Antigüedad de Albaranes")
+    
+    if 'Days_Since_Return' not in df.columns or 'Return_Date' not in df.columns:
+        st.info("📅 No hay información de fechas para analizar antigüedad")
+        return
+    
+    # Filtrar solo albaranes con tablillas pendientes
+    pending_df = df[df.get('Total_Open', 0) > 0].copy()
+    
+    if pending_df.empty:
+        st.success("🎉 ¡Excelente! No hay albaranes pendientes para analizar")
+        return
+    
+    # Categorizar por antigüedad
+    def categorize_age(days):
+        if days <= 7:
+            return '📗 Reciente (≤7 días)'
+        elif days <= 15:
+            return '📙 Moderado (8-15 días)'
+        elif days <= 30:
+            return '📕 Antiguo (16-30 días)'
+        else:
+            return '🚨 Crítico (>30 días)'
+    
+    pending_df['Age_Category'] = pending_df['Days_Since_Return'].apply(categorize_age)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Distribución por antigüedad
+        age_dist = pending_df['Age_Category'].value_counts()
+        
+        colors = {
+            '📗 Reciente (≤7 días)': '#28a745',
+            '📙 Moderado (8-15 días)': '#ffc107', 
+            '📕 Antiguo (16-30 días)': '#fd7e14',
+            '🚨 Crítico (>30 días)': '#dc3545'
+        }
+        
+        fig3 = px.pie(
+            values=age_dist.values,
+            names=age_dist.index,
+            title='📊 Distribución por Antigüedad',
+            color=age_dist.index,
+            color_discrete_map=colors
+        )
+        
+        fig3.update_traces(textinfo='percent+label')
+        st.plotly_chart(fig3, use_container_width=True)
+    
+    with col2:
+        # Timeline de albaranes más antiguos
+        oldest_15 = pending_df.nlargest(15, 'Days_Since_Return')[
+            ['Return_Packing_Slip', 'Customer_Name', 'Days_Since_Return', 'Total_Open', 'WH_Code']
+        ].copy()
+        
+        fig4 = px.bar(
+            oldest_15,
+            x='Days_Since_Return',
+            y='Return_Packing_Slip',
+            orientation='h',
+            title='⏱️ Top 15 Albaranes Más Antiguos',
+            color='Total_Open',
+            color_continuous_scale='Reds',
+            hover_data=['Customer_Name', 'WH_Code']
+        )
+        
+        fig4.update_layout(
+            xaxis_title="Días desde Retorno",
+            yaxis_title="Albarán",
+            height=500
+        )
+        
+        st.plotly_chart(fig4, use_container_width=True)
+    
+    # Análisis del mes actual
+    current_month = pd.Timestamp.now().replace(day=1)
+    month_old = pending_df[pending_df['Return_Date'] < current_month]
+    
+    if not month_old.empty:
+        st.markdown("### 🚨 Albaranes NO Resueltos del Mes Anterior")
+        
+        month_summary = month_old.groupby('WH_Code').agg({
+            'Total_Open': 'sum',
+            'Return_Packing_Slip': 'count',
+            'Days_Since_Return': 'mean'
+        }).round(1)
+        
+        month_summary.columns = ['Tablillas_Pendientes', 'Num_Albaranes', 'Días_Promedio']
+        month_summary = month_summary.sort_values('Días_Promedio', ascending=False)
+        
+        st.dataframe(month_summary, use_container_width=True)
+        
+        total_old_tablets = month_old['Total_Open'].sum()
+        total_old_albaranes = len(month_old)
+        avg_age = month_old['Days_Since_Return'].mean()
+        
+        st.error(f"""
+        ⚠️ **ATENCIÓN REQUERIDA**: {total_old_albaranes} albaranes del mes anterior siguen pendientes
+        - 🔓 **{total_old_tablets} tablillas** sin resolver
+        - ⏰ **{avg_age:.1f} días** de antigüedad promedio
+        - 🎯 **Acción recomendada**: Priorizar resolución inmediata
+        """)
+
+def show_performance_analysis(df: pd.DataFrame):
+    """Análisis de performance y tendencias"""
+    st.subheader("📈 Análisis de Performance")
+    
+    # Análisis de prioridades por almacén
+    if 'Priority_Level' in df.columns and 'WH_Code' in df.columns:
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Distribución de prioridades por almacén
+            priority_by_wh = df.groupby(['WH_Code', 'Priority_Level']).size().reset_index(name='count')
+            
+            fig5 = px.bar(
+                priority_by_wh,
+                x='WH_Code',
+                y='count',
+                color='Priority_Level',
+                title='🎯 Distribución de Prioridades por Almacén',
+                color_discrete_map={
+                    'Baja': '#28a745',
+                    'Media': '#ffc107',
+                    'Alta': '#fd7e14', 
+                    'Crítica': '#dc3545'
+                }
+            )
+            
+            fig5.update_layout(
+                xaxis_title="Almacén",
+                yaxis_title="Cantidad de Albaranes",
+                legend_title="Prioridad"
+            )
+            
+            st.plotly_chart(fig5, use_container_width=True)
+        
+        with col2:
+            # Correlación entre días y tablillas pendientes
+            if 'Days_Since_Return' in df.columns:
+                fig6 = px.scatter(
+                    df[df['Total_Open'] > 0],
+                    x='Days_Since_Return',
+                    y='Total_Open',
+                    color='WH_Code',
+                    size='Priority_Score',
+                    title='📊 Relación: Antigüedad vs Tablillas Pendientes',
+                    hover_data=['Customer_Name', 'Return_Packing_Slip']
+                )
+                
+                fig6.update_layout(
+                    xaxis_title="Días desde Retorno",
+                    yaxis_title="Tablillas Pendientes"
+                )
+                
+                st.plotly_chart(fig6, use_container_width=True)
+    
+    # Métricas de performance
+    show_performance_metrics(df)
+
+def show_performance_metrics(df: pd.DataFrame):
+    """Mostrar métricas clave de performance"""
+    st.subheader("🎯 Métricas Clave de Performance")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Calcular métricas
+    total_albaranes = len(df)
+    total_pending = df.get('Total_Open', pd.Series([0])).sum()
+    total_tablets = df.get('Total_Tablets', pd.Series([0])).sum()
+    
+    if total_tablets > 0:
+        completion_rate = ((total_tablets - total_pending) / total_tablets * 100)
+    else:
+        completion_rate = 0
+    
+    avg_age = df.get('Days_Since_Return', pd.Series([0])).mean()
+    
+    critical_count = len(df[df.get('Priority_Level', '') == 'Crítica'])
+    
+    old_month_count = 0
+    if 'Return_Date' in df.columns:
+        current_month = pd.Timestamp.now().replace(day=1)
+        old_month_count = len(df[df['Return_Date'] < current_month])
+    
+    with col1:
+        st.metric("📊 Tasa de Finalización", 
+                 f"{completion_rate:.1f}%",
+                 help="Porcentaje de tablillas completadas vs total")
+    
+    with col2:
+        st.metric("⏰ Antigüedad Promedio", 
+                 f"{avg_age:.1f} días",
+                 help="Días promedio desde retorno")
+    
+    with col3:
+        st.metric("🚨 Items Críticos", 
+                 critical_count,
+                 help="Albaranes que requieren atención inmediata")
+    
+    with col4:
+        st.metric("📅 Del Mes Anterior", 
+                 old_month_count,
+                 help="Albaranes que vienen del mes anterior")
+    
+    # Alertas de rendimiento
+    if completion_rate < 70:
+        st.warning(f"⚠️ **Tasa de finalización baja**: {completion_rate:.1f}% - Meta recomendada: >80%")
+    
+    if avg_age > 15:
+        st.warning(f"⚠️ **Antigüedad alta**: {avg_age:.1f} días promedio - Meta recomendada: <10 días")
+    
+    if old_month_count > 0:
+        st.error(f"🚨 **Rezago del mes anterior**: {old_month_count} albaranes requieren atención prioritaria")
+
+def show_trend_analysis(excel_data: Dict[str, pd.DataFrame]):
+    """Análisis de tendencias avanzado"""
+    st.markdown('<div class="section-header">📊 ANÁLISIS DE TENDENCIAS</div>', 
+                unsafe_allow_html=True)
+    
+    dates = sorted(excel_data.keys())
+    
+    # Análisis por almacén
+    if len(dates) >= 2:
+        wh_trends = analyze_warehouse_trends(excel_data, dates)
+        show_warehouse_trends(wh_trends)
+
+def analyze_warehouse_trends(excel_data: Dict[str, pd.DataFrame], dates: List[str]) -> Dict:
+    """Analizar tendencias por almacén"""
+    wh_data = {}
+    
+    for date in dates:
+        df = excel_data[date]
+        
+        if 'WH_Code' in df.columns and 'Total_Open' in df.columns:
+            wh_summary = df.groupby('WH_Code')['Total_Open'].sum()
+            
+            for wh, total_open in wh_summary.items():
+                if wh not in wh_data:
+                    wh_data[wh] = []
+                wh_data[wh].append({'date': date, 'total_open': total_open})
+    
+    return wh_data
+
+def show_warehouse_trends(wh_trends: Dict):
+    """Mostrar tendencias por almacén"""
+    if wh_trends:
+        st.subheader("🏢 Tendencias por Almacén")
+        
+        # Crear gráfico de líneas múltiples
+        fig = go.Figure()
+        
+        for wh, data in wh_trends.items():
+            if len(data) >= 2:  # Solo mostrar almacenes con al menos 2 puntos de datos
+                df_wh = pd.DataFrame(data)
+                df_wh['date'] = pd.to_datetime(df_wh['date'])
+                
+                fig.add_trace(go.Scatter(
+                    x=df_wh['date'],
+                    y=df_wh['total_open'],
+                    mode='lines+markers',
+                    name=f"Almacén {wh}",
+                    line=dict(width=3)
+                ))
+        
+        fig.update_layout(
+            title="Evolución de Tablillas Pendientes por Almacén",
+            xaxis_title="Fecha",
+            yaxis_title="Tablillas Pendientes",
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
+    """Exportar informe profesional multi-días"""
+    output = io.BytesIO()
+    
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            
+            # HOJA 1: Resumen Ejecutivo
+            summary = analysis_results.get('summary', {})
+            executive_data = {
+                'Métrica': [
+                    'Período de Análisis',
+                    'Archivos Analizados',
+                    'Fecha Más Antigua',
+                    'Fecha Más Reciente',
+                    '🆕 Total Nuevos Albaranes',
+                    '✅ Total Albaranes Cerrados', 
+                    '🔒 Total Tablillas Cerradas',
+                    '➕ Total Tablillas Agregadas',
+                    '📊 Eficiencia de Cierre (%)',
+                    '🎯 Score de Actividad'
+                ],
+                'Valor': [
+                    summary.get('analysis_period', 'N/A'),
+                    summary.get('num_files_analyzed', 0),
+                    summary.get('oldest_date', 'N/A'),
+                    summary.get('most_recent_date', 'N/A'),
+                    summary.get('total_new_albaranes', 0),
+                    summary.get('total_closed_albaranes', 0),
+                    summary.get('total_closed_tablets', 0),
+                    summary.get('total_added_tablets', 0),
+                    f"{(summary.get('total_closed_tablets', 0) / max(summary.get('total_added_tablets', 0) + summary.get('total_closed_tablets', 0), 1) * 100):.1f}%",
+                    f"{(summary.get('total_closed_tablets', 0) + summary.get('total_added_tablets', 0)) / max(summary.get('num_files_analyzed', 1), 1):.1f}"
+                ]
+            }
+            executive_df = pd.DataFrame(executive_data)
+            executive_df.to_excel(writer, sheet_name='Resumen_Ejecutivo', index=False)
+            
+            # HOJA 2: Evolución Diaria
+            if 'open_evolution' in summary:
+                evolution_df = pd.DataFrame(summary['open_evolution'])
+                evolution_df.to_excel(writer, sheet_name='Evolución_Diaria', index=False)
+            
+            # HOJA 3: Cambios Día a Día
+            if 'comparisons' in analysis_results:
+                daily_changes = []
+                for comp in analysis_results['comparisons']:
+                    daily_changes.append({
+                        'Fecha_Anterior': comp['previous_date'],
+                        'Fecha_Actual': comp['current_date'],
+                        'Nuevos_Albaranes': comp['new_albaranes'],
+                        'Albaranes_Cerrados': comp['closed_albaranes'],
+                        'Tablillas_Cerradas': comp['closed_tablets'],
+                        'Tablillas_Agregadas': comp.get('added_tablets', 0),
+                        'Albaranes_con_Agregados': comp.get('albaranes_with_added_tablets', 0),
+                        'Total_Pendientes_Anterior': comp['previous_total_open'],
+                        'Total_Pendientes_Actual': comp['current_total_open'],
+                        'Variación_Pendientes': comp['current_total_open'] - comp['previous_total_open']
+                    })
+                
+                daily_changes_df = pd.DataFrame(daily_changes)
+                daily_changes_df.to_excel(writer, sheet_name='Cambios_Diarios', index=False)
+            
+            # HOJA 4: Detalles de Cambios
+            all_changes = []
+            for comp in analysis_results.get('comparisons', []):
+                for change in comp.get('changed_albaranes', []):
+                    all_changes.append({
+                        'Fecha': comp['current_date'],
+                        'Albarán': change['albaran'],
+                        'Cliente': change['customer'],
+                        'Open_Anterior': change['previous_open'],
+                        'Open_Actual': change['current_open'],
+                        'Total_Anterior': change['previous_total'],
+                        'Total_Actual': change['current_total'],
+                        'Cambios': ' | '.join(change['changes'])
+                    })
+            
+            if all_changes:
+                changes_detail_df = pd.DataFrame(all_changes)
+                changes_detail_df.to_excel(writer, sheet_name='Detalles_Cambios', index=False)
+            
+            # HOJA 5: Análisis por Almacén
+            warehouse_analysis = []
+            dates = sorted(excel_data.keys())
+            
+            for date in dates:
+                df = excel_data[date]
+                if 'WH_Code' in df.columns and 'Total_Open' in df.columns:
+                    wh_summary = df.groupby('WH_Code').agg({
+                        'Total_Open': 'sum',
+                        'Total_Tablets': 'sum',
+                        'Return_Packing_Slip': 'count'
+                    }).reset_index()
+                    
+                    for _, row in wh_summary.iterrows():
+                        warehouse_analysis.append({
+                            'Fecha': date,
+                            'Almacén': row['WH_Code'],
+                            'Tablillas_Pendientes': row['Total_Open'],
+                            'Total_Tablillas': row['Total_Tablets'],
+                            'Número_Albaranes': row['Return_Packing_Slip']
+                        })
+            
+            if warehouse_analysis:
+                warehouse_df = pd.DataFrame(warehouse_analysis)
+                warehouse_df.to_excel(writer, sheet_name='Análisis_Almacenes', index=False)
+        
+        # Descargar
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+        filename = f"informe_profesional_tablillas_{timestamp}.xlsx"
+        
+        st.download_button(
+            label="📥 Descargar Informe Profesional",
+            data=output.getvalue(),
+            file_name=filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.success(f"✅ Informe profesional generado: **{filename}**")
+        st.info("📊 Incluye: Resumen ejecutivo, evolución diaria, cambios detallados, análisis por almacén")
+        
+    except Exception as e:
+        st.error(f"❌ Error generando informe: {str(e)}")
+
+def export_comprehensive_trends_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
+    """Exportar análisis completo de tendencias"""
+    st.info("🔄 Generando análisis completo de tendencias...")
+    
+    # Esta función puede expandirse para análisis más profundos
+    # Por ahora, usar la función principal con datos adicionales
+    export_professional_multi_day_report(analysis_results, excel_data)
 
 def show_extraction_error():
     """Mostrar error de extracción con soluciones"""
