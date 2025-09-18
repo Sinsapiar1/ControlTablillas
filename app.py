@@ -120,216 +120,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-class ExcelAnalyzer:
-    """Analizador de múltiples archivos Excel para comparación"""
-    
-    def __init__(self, excel_folder: str = "excel_exports"):
-        self.excel_folder = excel_folder
-        self.ensure_folder_exists()
-    
-    def ensure_folder_exists(self):
-        """Crear carpeta de Excel si no existe"""
-        if not os.path.exists(self.excel_folder):
-            os.makedirs(self.excel_folder)
-    
-    def load_excel_files(self, file_paths: List[str]) -> Dict[str, pd.DataFrame]:
-        """Cargar múltiples archivos Excel"""
-        excel_data = {}
-        
-        for file_path in file_paths:
-            try:
-                # Leer Excel
-                df = pd.read_excel(file_path)
-                
-                # Extraer fecha del nombre del archivo o usar fecha de modificación
-                file_name = os.path.basename(file_path)
-                
-                # Intentar extraer fecha del nombre (formato: tablillas_YYYYMMDD_HHMM.xlsx)
-                date_match = re.search(r'(\d{8})_(\d{4})', file_name)
-                if date_match:
-                    date_str = date_match.group(1)
-                    file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
-                else:
-                    # Usar fecha de modificación del archivo
-                    mod_time = os.path.getmtime(file_path)
-                    file_date = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d')
-                
-                excel_data[file_date] = df
-                
-            except Exception as e:
-                st.error(f"❌ Error cargando {file_path}: {str(e)}")
-        
-        return excel_data
-    
-    def compare_excel_files(self, excel_data: Dict[str, pd.DataFrame]) -> Dict:
-        """Comparar datos entre archivos Excel"""
-        if len(excel_data) < 2:
-            return {"error": "Se necesitan al menos 2 archivos para comparar"}
-        
-        # Ordenar por fecha
-        sorted_dates = sorted(excel_data.keys())
-        
-        comparisons = []
-        
-        for i in range(1, len(sorted_dates)):
-            current_date = sorted_dates[i]
-            previous_date = sorted_dates[i-1]
-            
-            current_df = excel_data[current_date]
-            previous_df = excel_data[previous_date]
-            
-            comparison = self.compare_two_dataframes(
-                current_df, previous_df, current_date, previous_date
-            )
-            comparisons.append(comparison)
-        
-        # Resumen general
-        summary = self.create_comparison_summary(comparisons, excel_data)
-        
-        return {
-            "comparisons": comparisons,
-            "summary": summary,
-            "dates": sorted_dates
-        }
-    
-    def compare_two_dataframes(self, current_df: pd.DataFrame, previous_df: pd.DataFrame, 
-                              current_date: str, previous_date: str) -> Dict:
-        """Comparar dos DataFrames específicos"""
-        
-        # Normalizar nombres de columnas para la comparación
-        current_df = self.normalize_dataframe(current_df)
-        previous_df = self.normalize_dataframe(previous_df)
-        
-        # Albaranes actuales y anteriores
-        current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
-        previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
-        
-        # Calcular cambios
-        new_albaranes = current_albaranes - previous_albaranes
-        closed_albaranes = previous_albaranes - current_albaranes
-        continuing_albaranes = current_albaranes.intersection(previous_albaranes)
-        
-        # Análisis detallado de cambios en albaranes
-        closed_tablets = 0
-        added_tablets = 0
-        changed_albaranes = []
-        
-        for albaran in continuing_albaranes:
-            current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
-            previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
-            
-            if not current_row.empty and not previous_row.empty:
-                # Datos actuales
-                current_open = pd.to_numeric(current_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
-                current_total = pd.to_numeric(current_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
-                current_tablets_list = str(current_row.iloc[0].get('Tablets', ''))
-                
-                # Datos anteriores  
-                previous_open = pd.to_numeric(previous_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
-                previous_total = pd.to_numeric(previous_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
-                previous_tablets_list = str(previous_row.iloc[0].get('Tablets', ''))
-                
-                # Análisis de cambios
-                change_info = {
-                    'albaran': albaran,
-                    'customer': current_row.iloc[0].get('Customer_Name', 'N/A'),
-                    'previous_open': previous_open,
-                    'current_open': current_open,
-                    'previous_total': previous_total,
-                    'current_total': current_total,
-                    'changes': []
-                }
-                
-                # 1. Detectar tablillas cerradas (reducción en Open)
-                if previous_open > current_open:
-                    tablets_closed_count = previous_open - current_open
-                    closed_tablets += tablets_closed_count
-                    change_info['changes'].append(f"🔒 {tablets_closed_count} tablillas cerradas")
-                
-                # 2. Detectar tablillas agregadas (aumento en Total)
-                if current_total > previous_total:
-                    tablets_added_count = current_total - previous_total
-                    added_tablets += tablets_added_count
-                    change_info['changes'].append(f"➕ {tablets_added_count} tablillas agregadas")
-                
-                # 3. Detectar cambios en lista de tablillas
-                if current_tablets_list != previous_tablets_list and current_tablets_list and previous_tablets_list:
-                    change_info['changes'].append(f"📝 Lista de tablillas modificada")
-                    change_info['previous_tablets'] = previous_tablets_list
-                    change_info['current_tablets'] = current_tablets_list
-                
-                # Solo agregar si hay cambios
-                if change_info['changes']:
-                    changed_albaranes.append(change_info)
-        
-        return {
-            'current_date': current_date,
-            'previous_date': previous_date,
-            'new_albaranes': len(new_albaranes),
-            'closed_albaranes': len(closed_albaranes),
-            'closed_tablets': closed_tablets,
-            'added_tablets': added_tablets,
-            'new_albaranes_list': list(new_albaranes),
-            'closed_albaranes_list': list(closed_albaranes),
-            'changed_albaranes': changed_albaranes,
-            'current_total_open': current_df['Total_Open'].sum() if 'Total_Open' in current_df.columns else 0,
-            'previous_total_open': previous_df['Total_Open'].sum() if 'Total_Open' in previous_df.columns else 0,
-            'current_total_albaranes': len(current_df),
-            'previous_total_albaranes': len(previous_df),
-            'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])
-        }
-    
-    def normalize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalizar DataFrame para comparación"""
-        # Asegurar que las columnas principales existen
-        required_columns = ['Return_Packing_Slip', 'Total_Open', 'Customer_Name']
-        
-        for col in required_columns:
-            if col not in df.columns:
-                # Buscar columnas similares
-                similar_cols = [c for c in df.columns if col.lower() in c.lower() or c.lower() in col.lower()]
-                if similar_cols:
-                    df[col] = df[similar_cols[0]]
-                else:
-                    df[col] = 0 if 'Total' in col else 'N/A'
-        
-        return df
-    
-    def create_comparison_summary(self, comparisons: List[Dict], excel_data: Dict[str, pd.DataFrame]) -> Dict:
-        """Crear resumen de todas las comparaciones"""
-        if not comparisons:
-            return {}
-        
-        total_new_albaranes = sum(c['new_albaranes'] for c in comparisons)
-        total_closed_albaranes = sum(c['closed_albaranes'] for c in comparisons)
-        total_closed_tablets = sum(c['closed_tablets'] for c in comparisons)
-        total_added_tablets = sum(c.get('added_tablets', 0) for c in comparisons)
-        
-        # Análisis de tendencias
-        dates = sorted(excel_data.keys())
-        
-        # Evolución de tablillas pendientes
-        open_evolution = []
-        for date in dates:
-            df = excel_data[date]
-            if 'Total_Open' in df.columns:
-                total_open = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum()
-            else:
-                total_open = 0
-            open_evolution.append({'date': date, 'total_open': total_open})
-        
-        return {
-            'total_new_albaranes': total_new_albaranes,
-            'total_closed_albaranes': total_closed_albaranes,
-            'total_closed_tablets': total_closed_tablets,
-            'total_added_tablets': total_added_tablets,
-            'analysis_period': f"{dates[0]} a {dates[-1]}" if len(dates) >= 2 else dates[0],
-            'open_evolution': open_evolution,
-            'num_files_analyzed': len(excel_data),
-            'most_recent_date': dates[-1] if dates else None,
-            'oldest_date': dates[0] if dates else None
-        }
-
 class TablillasExtractorPro:
     """Extractor profesional mejorado"""
     
@@ -341,7 +131,6 @@ class TablillasExtractorPro:
             'Tablets', 'Total_Tablets', 'Open_Tablets', 'Total_Open',
             'Counting_Delay', 'Validation_Delay'
         ]
-        self.analyzer = ExcelAnalyzer()
     
     def extract_from_pdf(self, uploaded_file) -> Optional[pd.DataFrame]:
         """Extrae datos usando Camelot (método original perfeccionado)"""
@@ -476,9 +265,6 @@ class TablillasExtractorPro:
             if 'Days_Since_Return' not in df.columns:
                 df['Days_Since_Return'] = 0
             
-            if 'Slip_Age_Rank' not in df.columns:
-                df['Slip_Age_Rank'] = 0
-            
             # Días desde retorno
             if 'Return_Date' in df.columns:
                 try:
@@ -487,20 +273,6 @@ class TablillasExtractorPro:
                 except Exception as e:
                     st.warning(f"⚠️ Error calculando días desde retorno: {str(e)}")
                     df['Days_Since_Return'] = 0
-            
-            # Antigüedad del albarán basada en número correlativo
-            if 'Return_Packing_Slip' in df.columns:
-                try:
-                    # Extraer números del albarán para determinar antigüedad
-                    df['Slip_Number'] = df['Return_Packing_Slip'].str.extract(r'(\d+)', expand=False).astype(float)
-                    max_slip = df['Slip_Number'].max()
-                    if pd.notna(max_slip) and max_slip > 0:
-                        df['Slip_Age_Rank'] = (max_slip - df['Slip_Number']) / max_slip * 100
-                    else:
-                        df['Slip_Age_Rank'] = 0
-                except Exception as e:
-                    st.warning(f"⚠️ Error calculando antigüedad de albarán: {str(e)}")
-                    df['Slip_Age_Rank'] = 0
             
             # Asegurar que las columnas numéricas existen
             for col in ['Counting_Delay', 'Validation_Delay', 'Total_Open']:
@@ -512,11 +284,10 @@ class TablillasExtractorPro:
             
             # Score de prioridad mejorado
             df['Priority_Score'] = (
-                pd.to_numeric(df['Days_Since_Return'], errors='coerce').fillna(0) * 0.3 +
-                pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0) * 0.25 +
+                pd.to_numeric(df['Days_Since_Return'], errors='coerce').fillna(0) * 0.4 +
+                pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0) * 0.3 +
                 pd.to_numeric(df['Validation_Delay'], errors='coerce').fillna(0) * 0.2 +
-                pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0) * 0.15 +
-                pd.to_numeric(df['Slip_Age_Rank'], errors='coerce').fillna(0) * 0.1
+                pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0) * 0.1
             )
             
             # Asegurar que Priority_Score es numérico
@@ -565,8 +336,276 @@ class TablillasExtractorPro:
                 df['Urgency_Category'] = '⚪ SIN DATOS'
             return df
 
-# Importar funciones principales
-from functions import main, show_pdf_processing_tab, show_excel_analysis_tab
+def main():
+    """Función principal de la aplicación"""
+    # Header profesional
+    st.markdown('''
+    <div class="main-header">
+        <h1>🏗️ SISTEMA PROFESIONAL DE CONTROL DE TABLILLAS</h1>
+        <h2>Alsina Forms Co. - Análisis Diario por Excel</h2>
+        <p>📄 PDF → Excel perfecto | 📊 Análisis multi-archivo | 🔄 Comparaciones automáticas</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Verificar dependencias
+    if not CAMELOT_AVAILABLE:
+        st.markdown("""
+        <div class="alert-high">
+        <h3>❌ Camelot no está instalado</h3>
+        <p>Para instalar las dependencias necesarias:</p>
+        <code>pip install camelot-py[cv]</code><br>
+        <code>pip install opencv-python</code>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+    
+    # Pestañas principales
+    tab1, tab2 = st.tabs(["📄 PROCESAR PDF", "📊 ANÁLISIS MULTI-EXCEL"])
+    
+    with tab1:
+        show_pdf_processing_tab()
+    
+    with tab2:
+        show_excel_analysis_tab()
+
+def show_pdf_processing_tab():
+    """Pestaña para procesar PDF a Excel"""
+    st.markdown('<div class="section-header">📄 PROCESAR PDF DIARIO</div>', 
+                unsafe_allow_html=True)
+    
+    # Cargar PDF
+    uploaded_file = st.file_uploader(
+        "📂 Seleccionar archivo PDF",
+        type=['pdf'],
+        help="Sube el reporte de Outstanding Count Returns del día"
+    )
+    
+    if uploaded_file is not None:
+        st.markdown('<div class="file-info">📄 <strong>Procesando PDF...</strong></div>', 
+                    unsafe_allow_html=True)
+        
+        # Extraer datos
+        extractor = TablillasExtractorPro()
+        df = extractor.extract_from_pdf(uploaded_file)
+        
+        if df is not None and not df.empty:
+            st.markdown('<div class="success-box">✅ <strong>¡Extracción exitosa!</strong></div>', 
+                        unsafe_allow_html=True)
+            
+            # Mostrar resumen de datos extraídos
+            show_extraction_summary(df)
+            
+            # Mostrar datos principales
+            show_main_data_table(df)
+            
+            # Generar Excel automático
+            generate_daily_excel(df)
+        else:
+            show_extraction_error()
+
+def show_extraction_summary(df: pd.DataFrame):
+    """Mostrar resumen de extracción"""
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📋 Total Albaranes", len(df))
+    
+    with col2:
+        if 'Total_Open' in df.columns:
+            total_open = int(pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0).sum())
+        else:
+            total_open = 0
+        st.metric("🔓 Tablillas Pendientes", total_open)
+    
+    with col3:
+        if 'Counting_Delay' in df.columns:
+            avg_delay = pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0).mean()
+        else:
+            avg_delay = 0
+        st.metric("⏱️ Retraso Promedio", f"{avg_delay:.1f} días")
+    
+    with col4:
+        if 'Priority_Level' in df.columns:
+            critical_items = len(df[df['Priority_Level'] == 'Crítica'])
+        else:
+            critical_items = 0
+        st.metric("🚨 Items Críticos", critical_items)
+
+def show_main_data_table(df: pd.DataFrame):
+    """Mostrar tabla principal de datos"""
+    st.subheader("📋 Datos Extraídos")
+    
+    # Seleccionar columnas principales para mostrar
+    display_columns = [
+        'Return_Packing_Slip', 'Return_Date', 'Customer_Name', 'Job_Site_Name',
+        'WH_Code', 'Total_Tablets', 'Total_Open', 'Days_Since_Return', 
+        'Priority_Level', 'Urgency_Category'
+    ]
+    
+    available_columns = [col for col in display_columns if col in df.columns]
+    
+    if available_columns:
+        # Mostrar datos ordenados por prioridad
+        display_df = df[available_columns].copy()
+        
+        # Verificar qué columna usar para ordenar
+        if 'Priority_Score' in df.columns:
+            # Agregar Priority_Score a las columnas mostradas si existe
+            if 'Priority_Score' not in available_columns:
+                display_df['Priority_Score'] = df['Priority_Score']
+            display_df = display_df.sort_values('Priority_Score', ascending=False)
+        elif 'Days_Since_Return' in df.columns:
+            display_df = display_df.sort_values('Days_Since_Return', ascending=False)
+        elif 'Total_Open' in df.columns:
+            display_df = display_df.sort_values('Total_Open', ascending=False)
+        
+        st.dataframe(display_df, use_container_width=True)
+    else:
+        st.dataframe(df, use_container_width=True)
+
+def generate_daily_excel(df: pd.DataFrame):
+    """Generar Excel diario automático"""
+    st.subheader("💾 Generar Excel Diario")
+    
+    today = datetime.now().strftime('%Y%m%d_%H%M')
+    default_filename = f"tablillas_{today}.xlsx"
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        filename = st.text_input("📝 Nombre del archivo:", value=default_filename)
+    
+    with col2:
+        if st.button("📥 Generar Excel", type="primary"):
+            excel_data = create_comprehensive_excel(df)
+            
+            st.download_button(
+                label="💾 Descargar Excel Completo",
+                data=excel_data,
+                file_name=filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            st.success(f"✅ Excel generado: **{filename}**")
+            
+            # Información para el usuario
+            st.info("""
+            💡 **Guarda este archivo localmente** con la fecha del día.
+            Luego usa la pestaña "ANÁLISIS MULTI-EXCEL" para comparar múltiples días.
+            """)
+
+def create_comprehensive_excel(df: pd.DataFrame) -> bytes:
+    """Crear Excel completo con múltiples hojas"""
+    output = io.BytesIO()
+    
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Hoja 1: Datos completos
+            df.to_excel(writer, sheet_name='Datos_Completos', index=False)
+            
+            # Hoja 2: Solo alta prioridad y críticos
+            if 'Priority_Level' in df.columns:
+                priority_df = df[df['Priority_Level'].isin(['Alta', 'Crítica'])]
+                if not priority_df.empty:
+                    priority_df.to_excel(writer, sheet_name='Alta_Prioridad', index=False)
+            
+            # Hoja 3: Resumen por almacén
+            if 'WH_Code' in df.columns:
+                wh_summary = df.groupby('WH_Code').agg({
+                    'Total_Open': 'sum',
+                    'Total_Tablets': 'sum',
+                    'Counting_Delay': 'mean',
+                    'Return_Packing_Slip': 'count'
+                }).round(2)
+                wh_summary.columns = ['Tablillas_Pendientes', 'Total_Tablillas', 'Retraso_Promedio', 'Num_Albaranes']
+                wh_summary.to_excel(writer, sheet_name='Resumen_Almacenes')
+            
+            # Hoja 4: Métricas del día
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            # Calcular métricas de forma segura
+            total_open = pd.to_numeric(df.get('Total_Open', pd.Series([0])), errors='coerce').fillna(0).sum()
+            avg_delay = pd.to_numeric(df.get('Counting_Delay', pd.Series([0])), errors='coerce').fillna(0).mean()
+            critical_count = len(df[df.get('Priority_Level', '') == 'Crítica']) if 'Priority_Level' in df.columns else 0
+            high_count = len(df[df.get('Priority_Level', '') == 'Alta']) if 'Priority_Level' in df.columns else 0
+            unique_wh = df.get('WH_Code', pd.Series([''])).nunique() if 'WH_Code' in df.columns else 0
+            avg_score = pd.to_numeric(df.get('Priority_Score', pd.Series([0])), errors='coerce').fillna(0).mean()
+            
+            metrics_data = {
+                'Métrica': [
+                    'Fecha Procesamiento',
+                    'Total Albaranes',
+                    'Tablillas Pendientes',
+                    'Retraso Promedio',
+                    'Items Críticos',
+                    'Items Alta Prioridad',
+                    'Almacenes Activos',
+                    'Score Promedio'
+                ],
+                'Valor': [
+                    today,
+                    len(df),
+                    int(total_open),
+                    f"{avg_delay:.1f}",
+                    critical_count,
+                    high_count,
+                    unique_wh,
+                    f"{avg_score:.2f}"
+                ]
+            }
+            metrics_df = pd.DataFrame(metrics_data)
+            metrics_df.to_excel(writer, sheet_name='Métricas_Día', index=False)
+        
+        return output.getvalue()
+        
+    except Exception as e:
+        st.error(f"❌ Error generando Excel: {str(e)}")
+        return b''
+
+def show_excel_analysis_tab():
+    """Pestaña para análisis multi-Excel"""
+    st.markdown('<div class="section-header">📊 ANÁLISIS MULTI-EXCEL</div>', 
+                unsafe_allow_html=True)
+    
+    st.markdown("""
+    ### 🔄 Cargar múltiples archivos Excel para análisis comparativo
+    
+    Sube **2 o más archivos Excel** generados en días diferentes para:
+    - 📈 Ver tendencias y evolución
+    - 🔄 Detectar cambios día a día  
+    - 📊 Analizar performance histórica
+    - 🎯 Identificar patrones
+    """)
+    
+    # Cargar múltiples archivos Excel
+    uploaded_excel_files = st.file_uploader(
+        "📂 Seleccionar archivos Excel (múltiples)",
+        type=['xlsx', 'xls'],
+        accept_multiple_files=True,
+        help="Selecciona 2 o más archivos Excel de diferentes días"
+    )
+    
+    if uploaded_excel_files and len(uploaded_excel_files) >= 2:
+        st.info("📊 Análisis multi-Excel disponible próximamente")
+    elif uploaded_excel_files and len(uploaded_excel_files) == 1:
+        st.warning("⚠️ Se necesitan al menos 2 archivos para hacer comparación")
+    else:
+        st.info("📂 Selecciona múltiples archivos Excel para comenzar el análisis")
+
+def show_extraction_error():
+    """Mostrar error de extracción con soluciones"""
+    st.markdown("""
+    <div class="alert-high">
+    <h3>❌ No se pudieron extraer datos</h3>
+    <p><strong>Posibles soluciones:</strong></p>
+    <ul>
+        <li>✅ Verificar que el PDF contenga tablas estructuradas</li>
+        <li>🔐 Asegurar que el archivo no esté protegido con contraseña</li>
+        <li>📄 Confirmar que el formato sea el esperado de Alsina Forms</li>
+        <li>🔄 Intentar con un archivo PDF de ejemplo conocido</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
