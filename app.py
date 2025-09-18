@@ -7,15 +7,50 @@ from datetime import datetime, timedelta
 import re
 import tempfile
 import os
+import subprocess
+import sys
 from typing import Optional, List, Dict
 
-# Importar pdfplumber (más ligero que Camelot)
+# Intentar importar Camelot con instalación automática
+CAMELOT_AVAILABLE = False
+CAMELOT_INSTALLING = False
+
+def install_camelot():
+    """Instalar Camelot automáticamente"""
+    global CAMELOT_INSTALLING
+    CAMELOT_INSTALLING = True
+    
+    try:
+        st.info("🔄 Instalando Camelot-py... Esto puede tomar unos minutos.")
+        
+        # Instalar camelot-py
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "camelot-py[cv]"])
+        
+        # Instalar opencv-python
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "opencv-python"])
+        
+        st.success("✅ Camelot instalado exitosamente!")
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Error instalando Camelot: {str(e)}")
+        return False
+    finally:
+        CAMELOT_INSTALLING = False
+
+# Intentar importar Camelot
+try:
+    import camelot
+    CAMELOT_AVAILABLE = True
+except ImportError:
+    CAMELOT_AVAILABLE = False
+
+# Importar pdfplumber como respaldo
 try:
     import pdfplumber
     PDFPLUMBER_AVAILABLE = True
 except ImportError:
     PDFPLUMBER_AVAILABLE = False
-    st.error("⚠️ pdfplumber no está disponible")
 
 # Configuración de página
 st.set_page_config(
@@ -40,11 +75,12 @@ st.markdown("""
     .error-box { background: #f8d7da; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
     .warning-box { background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
     .info-box { background: #d1ecf1; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+    .install-box { background: #e2e3e5; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
 class TablillasExtractor:
-    """Extractor optimizado para PDFs de Alsina Forms usando pdfplumber"""
+    """Extractor especializado para PDFs de Alsina Forms usando Camelot"""
     
     def __init__(self):
         self.expected_columns = [
@@ -56,13 +92,82 @@ class TablillasExtractor:
         ]
     
     def extract_from_pdf(self, uploaded_file) -> Optional[pd.DataFrame]:
-        """Extrae datos usando pdfplumber optimizado"""
-        if not PDFPLUMBER_AVAILABLE:
-            st.error("❌ pdfplumber no está disponible")
-            return None
+        """Extrae datos usando Camelot (preferido) o pdfplumber (respaldo)"""
         
+        if CAMELOT_AVAILABLE:
+            st.info("🐪 Usando Camelot-py para extracción de tablas...")
+            return self._extract_with_camelot(uploaded_file)
+        elif PDFPLUMBER_AVAILABLE:
+            st.warning("📄 Camelot no disponible. Usando pdfplumber como respaldo...")
+            return self._extract_with_pdfplumber(uploaded_file)
+        else:
+            st.error("❌ No hay bibliotecas de PDF disponibles")
+            return None
+    
+    def _extract_with_camelot(self, uploaded_file) -> Optional[pd.DataFrame]:
+        """Extrae datos usando Camelot (LA MEJOR OPCIÓN)"""
         try:
-            st.info("📄 Extrayendo datos con pdfplumber optimizado...")
+            # Crear archivo temporal
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_file_path = tmp_file.name
+            
+            # Extraer tablas con Camelot
+            st.info("🔄 Extrayendo tablas con Camelot...")
+            
+            # Probar diferentes configuraciones
+            tables = None
+            
+            # Configuración 1: Stream (para tablas sin bordes)
+            try:
+                st.write("🔍 Probando método Stream...")
+                tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
+                st.write(f"📊 Método Stream: {len(tables)} tablas encontradas")
+            except Exception as e:
+                st.write(f"⚠️ Stream falló: {str(e)}")
+            
+            # Configuración 2: Lattice (para tablas con bordes) si Stream falla
+            if not tables or len(tables) == 0:
+                try:
+                    st.write("🔍 Probando método Lattice...")
+                    tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='lattice')
+                    st.write(f"📊 Método Lattice: {len(tables)} tablas encontradas")
+                except Exception as e:
+                    st.write(f"⚠️ Lattice falló: {str(e)}")
+            
+            # Configuración 3: Lattice con parámetros específicos
+            if not tables or len(tables) == 0:
+                try:
+                    st.write("🔍 Probando Lattice con parámetros específicos...")
+                    tables = camelot.read_pdf(
+                        tmp_file_path, 
+                        pages='all', 
+                        flavor='lattice',
+                        line_scale=40,
+                        copy_text=['v']
+                    )
+                    st.write(f"📊 Lattice específico: {len(tables)} tablas encontradas")
+                except Exception as e:
+                    st.write(f"⚠️ Lattice específico falló: {str(e)}")
+            
+            # Limpiar archivo temporal
+            os.unlink(tmp_file_path)
+            
+            if not tables or len(tables) == 0:
+                st.error("❌ No se encontraron tablas en el PDF")
+                return None
+            
+            # Procesar tablas encontradas
+            return self._process_tables(tables)
+            
+        except Exception as e:
+            st.error(f"❌ Error procesando PDF con Camelot: {str(e)}")
+            return None
+    
+    def _extract_with_pdfplumber(self, uploaded_file) -> Optional[pd.DataFrame]:
+        """Extrae datos usando pdfplumber como respaldo"""
+        try:
+            st.info("📄 Extrayendo texto con pdfplumber...")
             
             # Leer PDF con pdfplumber
             with pdfplumber.open(uploaded_file) as pdf:
@@ -73,36 +178,36 @@ class TablillasExtractor:
                     if page_text:
                         all_text += page_text + "\n"
                 
-                st.write(f"📄 PDF procesado: {len(pdf.pages)} páginas, {len(all_text)} caracteres")
+                st.write(f"📄 PDF leído: {len(pdf.pages)} páginas, {len(all_text)} caracteres")
             
             # Procesar texto para encontrar líneas FL
-            return self._process_text_optimized(all_text)
+            return self._process_text_lines(all_text)
             
         except Exception as e:
-            st.error(f"❌ Error procesando PDF: {str(e)}")
+            st.error(f"❌ Error procesando PDF con pdfplumber: {str(e)}")
             return None
     
-    def _process_text_optimized(self, text: str) -> Optional[pd.DataFrame]:
-        """Procesa texto de forma optimizada para extraer datos FL"""
+    def _process_text_lines(self, text: str) -> Optional[pd.DataFrame]:
+        """Procesa líneas de texto para extraer datos FL"""
         lines = text.split('\n')
         fl_lines = []
         
-        # Buscar líneas que empiecen con FL de forma más inteligente
+        # Buscar líneas que empiecen con FL
         for line in lines:
             line = line.strip()
-            if self._is_valid_fl_line(line):
+            if line.startswith('FL') and len(line.split()) >= 8:
                 fl_lines.append(line)
         
-        st.write(f"📋 Encontradas {len(fl_lines)} líneas FL válidas")
+        st.write(f"📋 Encontradas {len(fl_lines)} líneas FL")
         
         if not fl_lines:
-            st.error("❌ No se encontraron líneas FL válidas en el PDF")
+            st.error("❌ No se encontraron líneas FL en el PDF")
             return None
         
         # Procesar cada línea FL
         processed_data = []
         for i, line in enumerate(fl_lines):
-            row_data = self._parse_fl_line_optimized(line, i + 1)
+            row_data = self._parse_fl_line(line, i + 1)
             if row_data:
                 processed_data.append(row_data)
         
@@ -113,37 +218,19 @@ class TablillasExtractor:
             st.error("❌ No se pudieron procesar las líneas FL")
             return None
     
-    def _is_valid_fl_line(self, line: str) -> bool:
-        """Verifica si una línea es una línea FL válida"""
-        if not line.startswith('FL'):
-            return False
-        
-        parts = line.split()
-        if len(parts) < 8:
-            return False
-        
-        # Verificar que tenga al menos un número de packing slip (12 dígitos)
-        has_packing_slip = any(re.match(r'\d{12}', part) for part in parts)
-        if not has_packing_slip:
-            return False
-        
-        # Verificar que tenga al menos una fecha
-        has_date = any(re.match(r'\d{1,2}/\d{1,2}/\d{4}', part) for part in parts)
-        if not has_date:
-            return False
-        
-        return True
-    
-    def _parse_fl_line_optimized(self, line: str, line_num: int) -> Optional[Dict]:
-        """Parsea una línea FL de forma optimizada"""
+    def _parse_fl_line(self, line: str, line_num: int) -> Optional[Dict]:
+        """Parsea una línea FL individual"""
         try:
             parts = line.split()
+            
+            if len(parts) < 8:
+                return None
             
             # Extraer campos básicos
             wh_code = parts[1] if len(parts) > 1 else ""
             packing_slip = parts[2] if len(parts) > 2 else ""
             
-            # Buscar fechas de forma más precisa
+            # Buscar fechas (formato MM/DD/YYYY)
             dates = []
             for part in parts:
                 if re.match(r'\d{1,2}/\d{1,2}/\d{4}', part):
@@ -153,14 +240,37 @@ class TablillasExtractor:
             invoice_date = dates[1] if len(dates) > 1 else None
             counted_date = dates[2] if len(dates) > 2 else None
             
-            # Extraer nombre del cliente de forma más inteligente
-            customer_name = self._extract_customer_name(parts, dates)
+            # Buscar nombre del cliente
+            customer_start = -1
+            for i, part in enumerate(parts):
+                if re.match(r'\d{1,2}/\d{1,2}/\d{4}', part):
+                    customer_start = i + 1
+                    break
             
-            # Determinar estado definitivo
-            definitive_dev = self._extract_definitive_status(line, parts)
+            customer_name = ""
+            if customer_start != -1 and customer_start < len(parts):
+                customer_parts = []
+                for i in range(customer_start, len(parts)):
+                    if parts[i] in ['Yes', 'No', 'Ye', 's']:
+                        break
+                    customer_parts.append(parts[i])
+                customer_name = ' '.join(customer_parts) if customer_parts else ""
             
-            # Extraer números de tablillas
-            numbers = self._extract_numbers(parts)
+            # Buscar Yes/No
+            definitive_dev = "No"
+            for part in parts:
+                if part in ['Yes', 'Ye']:
+                    definitive_dev = "Yes"
+                    break
+                elif part == 's' and 'Ye' in line:
+                    definitive_dev = "Yes"
+                    break
+            
+            # Buscar números al final
+            numbers = []
+            for part in parts:
+                if part.isdigit():
+                    numbers.append(int(part))
             
             total_tablets = numbers[-4] if len(numbers) >= 4 else 0
             open_tablets = numbers[-3] if len(numbers) >= 3 else 0
@@ -185,55 +295,8 @@ class TablillasExtractor:
             }
             
         except Exception as e:
-            if line_num <= 5:  # Solo mostrar errores de las primeras 5 líneas
-                st.write(f"⚠️ Error en línea {line_num}: {str(e)}")
+            st.write(f"⚠️ Error en línea {line_num}: {str(e)}")
             return None
-    
-    def _extract_customer_name(self, parts: List[str], dates: List[str]) -> str:
-        """Extrae el nombre del cliente de forma inteligente"""
-        # Encontrar la posición después de la última fecha
-        last_date_pos = -1
-        for i, part in enumerate(parts):
-            if re.match(r'\d{1,2}/\d{1,2}/\d{4}', part):
-                last_date_pos = i
-        
-        if last_date_pos == -1:
-            return ""
-        
-        # Extraer texto hasta encontrar Yes/No o números
-        customer_parts = []
-        for i in range(last_date_pos + 1, len(parts)):
-            part = parts[i]
-            if part in ['Yes', 'No', 'Ye', 's'] or part.isdigit():
-                break
-            customer_parts.append(part)
-        
-        return ' '.join(customer_parts).strip()
-    
-    def _extract_definitive_status(self, line: str, parts: List[str]) -> str:
-        """Extrae el estado definitivo de forma inteligente"""
-        # Buscar "Yes" o "Ye s" (puede estar dividido)
-        if 'Yes' in line or 'Ye s' in line:
-            return "Yes"
-        
-        # Buscar "No"
-        if 'No' in line:
-            return "No"
-        
-        # Buscar "Ye" seguido de "s" en partes separadas
-        for i, part in enumerate(parts):
-            if part == 'Ye' and i + 1 < len(parts) and parts[i + 1] == 's':
-                return "Yes"
-        
-        return "No"
-    
-    def _extract_numbers(self, parts: List[str]) -> List[int]:
-        """Extrae números de forma inteligente"""
-        numbers = []
-        for part in parts:
-            if part.isdigit():
-                numbers.append(int(part))
-        return numbers
     
     def _parse_date(self, date_str: str) -> Optional[pd.Timestamp]:
         """Parsea fecha de forma segura"""
@@ -243,6 +306,37 @@ class TablillasExtractor:
             return pd.to_datetime(date_str, format='%m/%d/%Y')
         except:
             return None
+    
+    def _process_tables(self, tables) -> pd.DataFrame:
+        """Procesa las tablas extraídas con Camelot"""
+        all_data = []
+        
+        for i, table in enumerate(tables):
+            st.write(f"📋 Tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
+            
+            df = table.df
+            
+            # Mostrar muestra de la primera tabla
+            if i == 0:
+                st.write("**Muestra de datos extraídos:**")
+                st.dataframe(df.head(3), use_container_width=True)
+            
+            # Filtrar solo filas que empiecen con FL
+            fl_rows = df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)]
+            
+            if len(fl_rows) > 0:
+                st.write(f"✅ {len(fl_rows)} filas FL encontradas en tabla {i+1}")
+                all_data.append(fl_rows)
+        
+        if not all_data:
+            st.error("❌ No se encontraron filas con datos FL")
+            return None
+        
+        # Combinar todas las tablas
+        combined_df = pd.concat(all_data, ignore_index=True)
+        
+        # Limpiar y estandarizar
+        return self._clean_and_standardize(combined_df)
     
     def _clean_and_standardize(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpia y estandariza los datos"""
@@ -326,23 +420,36 @@ class TablillasExtractor:
 
 def main():
     # Header
-    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co.</h1><p>Extracción optimizada con pdfplumber</p></div>', 
+    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co.</h1><p>Extracción especializada con Camelot-py (LA MEJOR OPCIÓN)</p></div>', 
                 unsafe_allow_html=True)
     
     # Mostrar estado de dependencias
-    if PDFPLUMBER_AVAILABLE:
+    if CAMELOT_AVAILABLE:
         st.markdown("""
         <div class="success-box">
-        <h3>✅ pdfplumber Disponible</h3>
-        <p>Usando extracción optimizada y rápida de PDFs</p>
+        <h3>🐪 ✅ Camelot-py Disponible</h3>
+        <p><strong>¡Perfecto!</strong> Usando la mejor biblioteca para extracción de tablas de PDFs</p>
         </div>
         """, unsafe_allow_html=True)
+    elif PDFPLUMBER_AVAILABLE:
+        st.markdown("""
+        <div class="warning-box">
+        <h3>📄 ⚠️ Usando pdfplumber como respaldo</h3>
+        <p>Camelot no está disponible. Usando pdfplumber para extracción básica.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Botón para instalar Camelot
+        if st.button("🐪 Instalar Camelot-py (Recomendado)", type="primary"):
+            if install_camelot():
+                st.rerun()
     else:
         st.markdown("""
         <div class="error-box">
-        <h3>❌ pdfplumber no está disponible</h3>
-        <p>Instala la dependencia:</p>
-        <code>pip install pdfplumber</code>
+        <h3>❌ No hay bibliotecas de PDF disponibles</h3>
+        <p>Instala las dependencias necesarias:</p>
+        <code>pip install pdfplumber</code><br>
+        <code>pip install camelot-py[cv]</code>
         </div>
         """, unsafe_allow_html=True)
         st.stop()
@@ -376,7 +483,7 @@ def main():
             <h3>❌ No se pudieron extraer datos</h3>
             <p>Posibles soluciones:</p>
             <ul>
-                <li>Verificar que el PDF contenga líneas que empiecen con 'FL'</li>
+                <li>Verificar que el PDF contenga tablas o líneas FL</li>
                 <li>Asegurar que el archivo no esté protegido</li>
                 <li>Comprobar que el formato sea el esperado</li>
             </ul>
@@ -390,17 +497,19 @@ def main():
         
         1. **Subir PDF**: Usar el panel lateral para cargar el archivo
         
-        2. **Automático**: La aplicación extraerá los datos automáticamente
+        2. **Automático**: Camelot extraerá las tablas automáticamente
         
         3. **Verificar**: Revisar los datos extraídos en el dashboard
         
         4. **Descargar**: Exportar a Excel para análisis adicional
         
-        ### 🎯 Extracción Optimizada
-        - **pdfplumber**: Extracción rápida y confiable
-        - **Validación inteligente**: Verifica líneas FL válidas
-        - **Procesamiento optimizado**: Maneja datos complejos
-        - **Carga rápida**: Sin dependencias pesadas
+        ### 🐪 ¿Por qué Camelot es la Mejor Opción?
+        - **Diseñada específicamente** para extraer tablas de PDFs
+        - **Detecta automáticamente** la estructura tabular
+        - **Maneja correctamente** espacios y separadores
+        - **Preserva la alineación** de columnas
+        - **Menos errores** que parsing manual
+        - **Múltiples métodos** (Stream, Lattice) para diferentes tipos de PDFs
         
         ### 📊 Datos Extraídos
         - Código de almacén (WH_Code)
@@ -523,7 +632,7 @@ def download_excel(df: pd.DataFrame):
         
         # Botón de descarga
         current_date = datetime.now().strftime('%Y%m%d_%H%M')
-        filename = f"tablillas_{current_date}.xlsx"
+        filename = f"tablillas_camelot_{current_date}.xlsx"
         
         st.download_button(
             label="📥 Descargar Excel Completo",
