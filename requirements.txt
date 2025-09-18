@@ -2,6 +2,7 @@ streamlit
 pandas
 plotly
 openpyxl
+xlsxwriter
 camelot-py[cv]
 opencv-python
 ghostscript
