@@ -339,6 +339,11 @@ class ExcelAnalyzer:
                         df[col] = 0 if 'Total' in col else 'N/A'
                         st.warning(f"⚠️ Columna '{col}' no encontrada, usando valor por defecto")
             
+            # NUEVO: Normalizar códigos de almacén en comparaciones
+            if 'WH_Code' in df.columns:
+                df['WH_Code'] = df['WH_Code'].str.upper()
+                st.info(f"🔧 Normalizados códigos de almacén para comparación")
+            
             return df
         except Exception as e:
             st.error(f"❌ Error normalizando DataFrame: {str(e)}")
@@ -642,6 +647,11 @@ class TablillasExtractorPro:
         for col in string_columns:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
+        
+        # NUEVO: Normalizar códigos de almacén a MAYÚSCULAS
+        if 'WH_Code' in df.columns:
+            df['WH_Code'] = df['WH_Code'].str.upper()
+            st.info(f"🔧 Normalizados códigos de almacén a mayúsculas (ej: 612d → 612D)")
         
         return df
     
@@ -1106,6 +1116,11 @@ def load_excel_files_direct(uploaded_files) -> Dict[str, pd.DataFrame]:
                 file_date = datetime.now().strftime('%Y-%m-%d_%H%M')
                 st.write(f"📅 Usando fecha actual: {file_date}")
             
+            # NUEVO: Normalizar códigos de almacén en archivos Excel
+            if 'WH_Code' in df.columns:
+                df['WH_Code'] = df['WH_Code'].str.upper()
+                st.info(f"🔧 Normalizados códigos de almacén en {file_name}")
+            
             # Verificar que el DataFrame tiene las columnas esperadas
             if 'Return_Packing_Slip' in df.columns or 'WH_Code' in df.columns:
                 excel_data[file_date] = df
@@ -1141,6 +1156,11 @@ def load_excel_files_direct(uploaded_files) -> Dict[str, pd.DataFrame]:
                     file_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
                 else:
                     file_date = datetime.now().strftime('%Y-%m-%d_%H%M')
+                
+                # NUEVO: Normalizar códigos de almacén también en engine alternativo
+                if 'WH_Code' in df.columns:
+                    df['WH_Code'] = df['WH_Code'].str.upper()
+                    st.info(f"🔧 Normalizados códigos de almacén en {file_name} (engine alternativo)")
                 
                 excel_data[file_date] = df
                 st.success(f"✅ {file_name} cargado con engine alternativo")
