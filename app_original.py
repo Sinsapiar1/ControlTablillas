@@ -504,15 +504,26 @@ class TablillasExtractorPro:
                     counting_delay = int(match.group(13))
                     validation_delay = int(match.group(14))
                     
+                    # Convertir fechas a formato datetime
+                    try:
+                        return_date_dt = pd.to_datetime(return_date, format='%m/%d/%Y')
+                        counting_date_dt = pd.to_datetime(counting_date, format='%m/%d/%Y')
+                        validation_date_dt = pd.to_datetime(validation_date, format='%m/%d/%Y')
+                    except:
+                        # Si falla la conversión, usar las fechas como string
+                        return_date_dt = return_date
+                        counting_date_dt = counting_date
+                        validation_date_dt = validation_date
+                    
                     # Crear fila corregida con todas las columnas necesarias
                     corrected_row = {
                         'WH_Code': wh_code,
                         'Return_Packing_Slip': albaran,
-                        'Return_Date': return_date,
+                        'Return_Date': return_date_dt,
                         'Customer_ID': customer_id,
                         'FL_Code': fl_code,
-                        'Counting_Date': counting_date,
-                        'Validation_Date': validation_date,
+                        'Counting_Date': counting_date_dt,
+                        'Validation_Date': validation_date_dt,
                         'Customer_Name': customer_name,
                         'Tablet_Numbers': tablet_numbers,
                         'Total_Tablets': total_tablets,
@@ -1364,7 +1375,17 @@ def show_aging_analysis(df: pd.DataFrame):
     
     # Análisis del mes actual
     current_month = pd.Timestamp.now().replace(day=1)
-    month_old = pending_df[pending_df['Return_Date'] < current_month]
+    
+    # Asegurar que Return_Date sea datetime
+    if 'Return_Date' in pending_df.columns:
+        try:
+            pending_df['Return_Date'] = pd.to_datetime(pending_df['Return_Date'], errors='coerce')
+            month_old = pending_df[pending_df['Return_Date'] < current_month]
+        except Exception as e:
+            st.warning(f"⚠️ Error procesando fechas: {str(e)}")
+            month_old = pd.DataFrame()  # DataFrame vacío si hay error
+    else:
+        month_old = pd.DataFrame()  # DataFrame vacío si no hay columna de fecha
     
     if not month_old.empty:
         st.markdown("### 🚨 Albaranes NO Resueltos del Mes Anterior")
