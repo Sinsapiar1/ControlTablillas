@@ -8,3 +8,5 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
     # Updated: 2024 - Clean repository configuration
+    # Build command explicitly points to requirements_compatible.txt
+    # All Railway/Vercel files removed from repository
