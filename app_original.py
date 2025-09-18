@@ -11,6 +11,8 @@ import os
 import glob
 from typing import Optional, List, Dict, Tuple
 import hashlib
+import time
+import signal
 
 # Intentar importar Camelot
 try:
@@ -355,33 +357,51 @@ class TablillasExtractorPro:
                 tmp_file.write(uploaded_file.read())
                 tmp_file_path = tmp_file.name
             
-            st.info("🔄 Extrayendo datos con Camelot...")
+            # Mostrar progreso
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text("🔄 Iniciando extracción con Camelot...")
+            progress_bar.progress(10)
             
             # Probar diferentes configuraciones de Camelot
             tables = None
             
             try:
+                status_text.text("📊 Probando método Stream (más rápido)...")
+                progress_bar.progress(30)
+                
                 # Método 1: Stream (mejor para tablas sin bordes definidos)
-                tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
+                tables = camelot.read_pdf(tmp_file_path, pages='1-3', flavor='stream')  # Solo primeras 3 páginas
                 st.write(f"📊 Método Stream: {len(tables)} tablas encontradas")
+                progress_bar.progress(60)
+                
             except Exception as e:
                 st.write(f"Stream falló: {str(e)}")
                 
             if not tables or len(tables) == 0:
                 try:
+                    status_text.text("📊 Probando método Lattice...")
+                    progress_bar.progress(70)
+                    
                     # Método 2: Lattice (mejor para tablas con bordes)
-                    tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='lattice')
+                    tables = camelot.read_pdf(tmp_file_path, pages='1-3', flavor='lattice')  # Solo primeras 3 páginas
                     st.write(f"📊 Método Lattice: {len(tables)} tablas encontradas")
+                    progress_bar.progress(80)
+                    
                 except Exception as e:
                     st.write(f"Lattice falló: {str(e)}")
             
             # Si ambos métodos fallan, intentar con páginas específicas
             if not tables or len(tables) == 0:
                 try:
-                    st.info("🔄 Intentando con páginas específicas...")
-                    # Intentar página por página
-                    for page_num in range(1, 6):  # Intentar primeras 5 páginas
+                    status_text.text("🔄 Buscando en páginas específicas...")
+                    progress_bar.progress(85)
+                    
+                    # Intentar página por página (solo primeras 3 páginas)
+                    for page_num in range(1, 4):  # Solo primeras 3 páginas
                         try:
+                            status_text.text(f"📄 Procesando página {page_num}...")
                             page_tables = camelot.read_pdf(tmp_file_path, pages=str(page_num), flavor='stream')
                             if page_tables and len(page_tables) > 0:
                                 st.write(f"📊 Página {page_num}: {len(page_tables)} tablas encontradas")
@@ -392,8 +412,14 @@ class TablillasExtractorPro:
                         except Exception as e:
                             st.write(f"Página {page_num} falló: {str(e)}")
                             continue
+                    
+                    progress_bar.progress(95)
+                    
                 except Exception as e:
                     st.write(f"Búsqueda por páginas falló: {str(e)}")
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Procesamiento completado")
             
             # Limpiar archivo temporal
             os.unlink(tmp_file_path)
@@ -639,9 +665,24 @@ def show_pdf_processing_tab():
         st.markdown('<div class="file-info">📄 <strong>Procesando PDF...</strong></div>', 
                     unsafe_allow_html=True)
         
+        # Información sobre tiempo de procesamiento
+        st.info("""
+        ⏱️ **Tiempo de procesamiento esperado:**
+        - 📄 PDF pequeño (< 1MB): 30-60 segundos
+        - 📄 PDF mediano (1-5MB): 1-3 minutos  
+        - 📄 PDF grande (> 5MB): 3-5 minutos
+        
+        💡 **Consejo:** Si se demora mucho, puedes cancelar y probar con un PDF más pequeño.
+        """)
+        
         # Extraer datos
+        start_time = time.time()
         extractor = TablillasExtractorPro()
         df = extractor.extract_from_pdf(uploaded_file)
+        end_time = time.time()
+        
+        processing_time = end_time - start_time
+        st.success(f"⏱️ Tiempo de procesamiento: {processing_time:.1f} segundos")
         
         if df is not None and not df.empty:
             st.markdown('<div class="success-box">✅ <strong>¡Extracción exitosa!</strong></div>', 
