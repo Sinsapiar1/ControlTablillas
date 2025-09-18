@@ -14,10 +14,5 @@
   ],
   "env": {
     "PYTHONPATH": "/var/task"
-  },
-  "functions": {
-    "vercel_streamlit.py": {
-      "maxDuration": 60
-    }
   }
 }
