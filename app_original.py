@@ -346,7 +346,7 @@ class TablillasExtractorPro:
         self.analyzer = ExcelAnalyzer()
     
     def extract_from_pdf(self, uploaded_file) -> Optional[pd.DataFrame]:
-        """Extrae datos usando Camelot (método original perfeccionado)"""
+        """Extrae datos usando configuraciones múltiples de Camelot"""
         if not CAMELOT_AVAILABLE:
             st.error("⚠️ Camelot no está instalado. Ejecuta: pip install camelot-py[cv]")
             return None
@@ -357,80 +357,63 @@ class TablillasExtractorPro:
                 tmp_file.write(uploaded_file.read())
                 tmp_file_path = tmp_file.name
             
-            # Mostrar progreso
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            st.info("🔄 Extrayendo datos con múltiples métodos Camelot...")
             
-            status_text.text("🔄 Iniciando extracción con Camelot...")
-            progress_bar.progress(10)
-            
-            # Probar diferentes configuraciones de Camelot
             tables = None
+            method_used = ""
             
+            # MÉTODO 1: Stream con configuraciones optimizadas
             try:
-                status_text.text("📊 Probando método Stream (más rápido)...")
-                progress_bar.progress(30)
-                
-                # Método 1: Stream (mejor para tablas sin bordes definidos)
-                tables = camelot.read_pdf(tmp_file_path, pages='1-3', flavor='stream')  # Solo primeras 3 páginas
-                st.write(f"📊 Método Stream: {len(tables)} tablas encontradas")
-                progress_bar.progress(60)
-                
+                tables = camelot.read_pdf(
+                    tmp_file_path, 
+                    pages='all', 
+                    flavor='stream',
+                    edge_tol=500,           # Tolerancia para detectar bordes
+                    row_tol=10,             # Tolerancia para separar filas
+                    column_tol=0,           # Tolerancia estricta para columnas
+                    split_text=True,        # Dividir texto en celdas
+                    flag_size=True          # Marcar tamaños de fuente
+                )
+                if len(tables) > 0:
+                    method_used = "Stream Optimizado"
+                    st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
             except Exception as e:
-                st.write(f"Stream falló: {str(e)}")
-                
+                st.write(f"Stream Optimizado falló: {str(e)}")
+            
+            # MÉTODO 2: Stream básico (fallback)
             if not tables or len(tables) == 0:
                 try:
-                    status_text.text("📊 Probando método Lattice...")
-                    progress_bar.progress(70)
-                    
-                    # Método 2: Lattice (mejor para tablas con bordes)
-                    tables = camelot.read_pdf(tmp_file_path, pages='1-3', flavor='lattice')  # Solo primeras 3 páginas
-                    st.write(f"📊 Método Lattice: {len(tables)} tablas encontradas")
-                    progress_bar.progress(80)
-                    
+                    tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
+                    if len(tables) > 0:
+                        method_used = "Stream Básico"
+                        st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
                 except Exception as e:
-                    st.write(f"Lattice falló: {str(e)}")
+                    st.write(f"Stream Básico falló: {str(e)}")
             
-            # Si ambos métodos fallan, intentar con páginas específicas
+            # MÉTODO 3: Lattice con configuraciones
             if not tables or len(tables) == 0:
                 try:
-                    status_text.text("🔄 Buscando en páginas específicas...")
-                    progress_bar.progress(85)
-                    
-                    # Intentar página por página (solo primeras 3 páginas)
-                    for page_num in range(1, 4):  # Solo primeras 3 páginas
-                        try:
-                            status_text.text(f"📄 Procesando página {page_num}...")
-                            page_tables = camelot.read_pdf(tmp_file_path, pages=str(page_num), flavor='stream')
-                            if page_tables and len(page_tables) > 0:
-                                st.write(f"📊 Página {page_num}: {len(page_tables)} tablas encontradas")
-                                if tables is None:
-                                    tables = page_tables
-                                else:
-                                    tables.extend(page_tables)
-                        except Exception as e:
-                            st.write(f"Página {page_num} falló: {str(e)}")
-                            continue
-                    
-                    progress_bar.progress(95)
-                    
+                    tables = camelot.read_pdf(
+                        tmp_file_path, 
+                        pages='all', 
+                        flavor='lattice',
+                        process_background=True,   # Procesar fondo
+                        line_scale=15             # Escala de líneas
+                    )
+                    if len(tables) > 0:
+                        method_used = "Lattice Optimizado"
+                        st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
                 except Exception as e:
-                    st.write(f"Búsqueda por páginas falló: {str(e)}")
-            
-            progress_bar.progress(100)
-            status_text.text("✅ Procesamiento completado")
+                    st.write(f"Lattice Optimizado falló: {str(e)}")
             
             # Limpiar archivo temporal
             os.unlink(tmp_file_path)
             
             if not tables or len(tables) == 0:
-                st.error("❌ No se encontraron tablas en el PDF")
-                st.info("💡 **Sugerencias:**")
-                st.write("- Verifica que el PDF contenga tablas estructuradas")
-                st.write("- Asegúrate de que el archivo no esté protegido")
-                st.write("- Intenta con un PDF de ejemplo conocido")
+                st.error("❌ No se encontraron tablas en el PDF con ningún método")
                 return None
+            
+            st.info(f"🎯 Método exitoso: {method_used}")
             
             # Procesar tablas encontradas
             return self._process_tables_advanced(tables)
@@ -446,10 +429,6 @@ class TablillasExtractorPro:
         for i, table in enumerate(tables):
             st.write(f"🔍 Procesando tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
             
-            # Mostrar tabla raw para debugging
-            st.write(f"📋 **Tabla {i+1} RAW (primeras 3 filas):**")
-            st.dataframe(table.df.head(3), use_container_width=True)
-            
             df = table.df
             
             # Filtrar solo filas que empiecen con FL (datos de Alsina Forms)
@@ -457,10 +436,7 @@ class TablillasExtractorPro:
             
             if len(fl_rows) > 0:
                 st.write(f"✅ {len(fl_rows)} filas FL encontradas en tabla {i+1}")
-                
-                # Procesar cada fila FL individualmente para corregir columnas mezcladas
-                processed_fl_rows = self._fix_mixed_columns(fl_rows)
-                all_data.append(processed_fl_rows)
+                all_data.append(fl_rows)
         
         if not all_data:
             st.error("❌ No se encontraron filas con datos FL")
@@ -472,114 +448,105 @@ class TablillasExtractorPro:
         # Limpiar y estandarizar
         return self._clean_and_standardize_advanced(combined_df)
     
-    def _fix_mixed_columns(self, fl_rows: pd.DataFrame) -> pd.DataFrame:
-        """Corregir columnas mezcladas en filas FL"""
-        corrected_rows = []
-        
-        for idx, row in fl_rows.iterrows():
-            try:
-                # Convertir toda la fila a string y unir
-                row_text = ' '.join([str(cell) for cell in row if pd.notna(cell) and str(cell).strip()])
+    def _fix_concatenated_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Corregir columnas concatenadas - Solución para el problema específico"""
+        try:
+            st.info("🔧 Corrigiendo columnas mal separadas...")
+            
+            # Crear copia para trabajar
+            fixed_df = df.copy()
+            corrections_made = 0
+            
+            # Verificar si la primera columna contiene patrones problemáticos
+            for idx in fixed_df.index:
+                first_col = str(fixed_df.iloc[idx, 0]).strip()
                 
-                # Patrón para extraer datos de fila FL
-                # FL 612D 729000018764 9/18/2025 40036645 FL052 8/31/2025 9/30/2025 Thales Builders Corp Residences at Martin Mano No 279, 282, 287 3 279A, 282T, 287T 3 0 0
-                pattern = r'FL\s+(\w+)\s+(\d+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+(\w+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(.+?)\s+No\s+(.+?)\s+(\d+)\s+(.+?)\s+(\d+)\s+(\d+)\s+(\d+)'
-                
-                match = re.search(pattern, row_text)
-                
-                if match:
-                    # Extraer datos usando regex
-                    wh_code = match.group(1)
-                    albaran = match.group(2)
-                    return_date = match.group(3)
-                    customer_id = match.group(4)
-                    fl_code = match.group(5)
-                    counting_date = match.group(6)
-                    validation_date = match.group(7)
-                    customer_name = match.group(8).strip()
-                    tablet_numbers = match.group(9).strip()
-                    total_tablets = int(match.group(10))
-                    tablet_codes = match.group(11).strip()
-                    total_open = int(match.group(12))
-                    counting_delay = int(match.group(13))
-                    validation_delay = int(match.group(14))
+                # Patrón: "FL 612D 729000018764" o similar
+                if first_col.startswith('FL '):
+                    parts = first_col.split()
                     
-                    # Convertir fechas a formato datetime
-                    try:
-                        return_date_dt = pd.to_datetime(return_date, format='%m/%d/%Y')
-                        counting_date_dt = pd.to_datetime(counting_date, format='%m/%d/%Y')
-                        validation_date_dt = pd.to_datetime(validation_date, format='%m/%d/%Y')
-                    except:
-                        # Si falla la conversión, usar las fechas como string
-                        return_date_dt = return_date
-                        counting_date_dt = counting_date
-                        validation_date_dt = validation_date
-                    
-                    # Crear fila corregida con todas las columnas necesarias
-                    corrected_row = {
-                        'WH_Code': wh_code,
-                        'Return_Packing_Slip': albaran,
-                        'Return_Date': return_date_dt,
-                        'Customer_ID': customer_id,
-                        'FL_Code': fl_code,
-                        'Counting_Date': counting_date_dt,
-                        'Validation_Date': validation_date_dt,
-                        'Customer_Name': customer_name,
-                        'Tablet_Numbers': tablet_numbers,
-                        'Total_Tablets': total_tablets,
-                        'Tablet_Codes': tablet_codes,
-                        'Total_Open': total_open,
-                        'Counting_Delay': counting_delay,
-                        'Validation_Delay': validation_delay,
-                        # Agregar columnas calculadas que necesita el análisis visual
-                        'Days_Since_Return': 0,  # Se calculará después
-                        'Priority_Score': 0,     # Se calculará después
-                        'Slip_Age_Rank': 0,      # Se calculará después
-                        'Priority_Level': 'Media' # Valor por defecto
-                    }
-                    
-                    corrected_rows.append(corrected_row)
-                    st.write(f"✅ Fila corregida: {albaran} - {customer_name}")
-                    
-                else:
-                    # Si no coincide el patrón, intentar extraer datos básicos
-                    st.write(f"⚠️ No se pudo corregir fila: {row_text[:100]}...")
-                    
-                    # Intentar extraer al menos el albarán
-                    albaran_match = re.search(r'(\d{12})', row_text)
-                    if albaran_match:
-                        albaran = albaran_match.group(1)
-                        # Usar datos originales pero con albarán corregido
-                        original_row = row.to_dict()
-                        original_row['Return_Packing_Slip'] = albaran
+                    if len(parts) >= 3:
+                        # Separar correctamente
+                        fixed_df.iloc[idx, 0] = parts[0]  # "FL"
                         
-                        # Asegurar que tiene las columnas necesarias
-                        if 'Days_Since_Return' not in original_row:
-                            original_row['Days_Since_Return'] = 0
-                        if 'Priority_Score' not in original_row:
-                            original_row['Priority_Score'] = 0
-                        if 'Slip_Age_Rank' not in original_row:
-                            original_row['Slip_Age_Rank'] = 0
-                        if 'Priority_Level' not in original_row:
-                            original_row['Priority_Level'] = 'Media'
-                            
-                        corrected_rows.append(original_row)
-                        st.write(f"🔄 Fila parcialmente corregida: {albaran}")
+                        # Si tenemos suficientes columnas, distribuir
+                        if len(fixed_df.columns) > 1:
+                            fixed_df.iloc[idx, 1] = parts[1]  # WH_Code como "612D"
+                        
+                        if len(fixed_df.columns) > 2:
+                            fixed_df.iloc[idx, 2] = parts[2]  # Return_Packing_Slip como "729000018764"
+                        
+                        # Mover el resto de contenido hacia la derecha si es necesario
+                        remaining_parts = parts[3:] if len(parts) > 3 else []
+                        for i, part in enumerate(remaining_parts, start=3):
+                            if i < len(fixed_df.columns):
+                                # Solo reemplazar si la celda está vacía
+                                current_val = fixed_df.iloc[idx, i]
+                                if pd.isna(current_val) or str(current_val).strip() == '':
+                                    fixed_df.iloc[idx, i] = part
+                                else:
+                                    # Insertar nuevo contenido desplazando el existente
+                                    break
+                        
+                        corrections_made += 1
+                
+                # Patrón alternativo: Primera columna solo tiene "612D 729000018764" sin FL
+                elif ' ' in first_col and len(first_col.split()) == 2:
+                    parts = first_col.split()
                     
-            except Exception as e:
-                st.write(f"❌ Error corrigiendo fila {idx}: {str(e)}")
-                continue
-        
-        if corrected_rows:
-            return pd.DataFrame(corrected_rows)
-        else:
-            return fl_rows  # Devolver original si no se pudo corregir nada
+                    # Verificar si parece WH_Code + Return_Packing_Slip
+                    if (len(parts[0]) <= 4 and  # WH_Code corto
+                        len(parts[1]) >= 10 and parts[1].isdigit()):  # Return_Packing_Slip largo
+                        
+                        # Insertar FL al principio y separar
+                        fixed_df.iloc[idx, 0] = "FL"
+                        
+                        # Mover contenido hacia la derecha
+                        if len(fixed_df.columns) > 1:
+                            # Guardar contenido actual de las columnas siguientes
+                            old_content = [fixed_df.iloc[idx, i] for i in range(1, len(fixed_df.columns))]
+                            
+                            # Colocar WH_Code en segunda posición
+                            fixed_df.iloc[idx, 1] = parts[0]
+                            
+                            # Colocar Return_Packing_Slip en tercera posición
+                            if len(fixed_df.columns) > 2:
+                                fixed_df.iloc[idx, 2] = parts[1]
+                                
+                                # Mover el contenido restante una posición a la derecha
+                                for i, val in enumerate(old_content[1:], start=3):
+                                    if i < len(fixed_df.columns) and not pd.isna(val) and str(val).strip():
+                                        fixed_df.iloc[idx, i] = val
+                        
+                        corrections_made += 1
+            
+            # Mostrar resultados
+            if corrections_made > 0:
+                st.success(f"✅ {corrections_made} filas corregidas")
+                st.write("**Ejemplo de corrección:**")
+                
+                # Mostrar ejemplo de la primera fila corregida
+                example_idx = 0
+                if len(df) > example_idx:
+                    st.write(f"**Antes:** {df.iloc[example_idx, 0]}")
+                    st.write(f"**Después:** Col1='{fixed_df.iloc[example_idx, 0]}' | Col2='{fixed_df.iloc[example_idx, 1]}' | Col3='{fixed_df.iloc[example_idx, 2]}'")
+            else:
+                st.info("✅ No se encontraron columnas concatenadas para corregir")
+            
+            return fixed_df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error corrigiendo columnas: {str(e)}")
+            return df
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza y estandarización avanzada"""
         try:
             # Eliminar filas completamente vacías
             df = df.dropna(how='all').reset_index(drop=True)
+            
+            # *** NUEVA FUNCIÓN - CORREGIR COLUMNAS CONCATENADAS ***
+            df = self._fix_concatenated_columns(df)
             
             # Asignar nombres de columna estándar
             num_cols = len(df.columns)
