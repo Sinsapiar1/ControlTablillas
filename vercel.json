@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "vercel_app_minimal.py",
+      "src": "vercel_app_streamlit_only.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "vercel_app_minimal.py"
+      "dest": "vercel_app_streamlit_only.py"
     }
   ],
   "env": {
