@@ -1144,10 +1144,14 @@ def show_comparative_analysis(analysis_results: Dict, excel_data: Dict[str, pd.D
     show_trend_analysis(excel_data)
 
 def show_analysis_summary(summary: Dict):
-    """Mostrar resumen del análisis"""
+    """Mostrar resumen del análisis - VERSIÓN MEJORADA"""
     st.markdown('<div class="section-header">📊 RESUMEN DEL ANÁLISIS</div>', 
                 unsafe_allow_html=True)
     
+    # NUEVO: Dashboard visual profesional
+    show_executive_dashboard(summary)
+    
+    # Métricas tradicionales (mantenidas)
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
@@ -1165,30 +1169,214 @@ def show_analysis_summary(summary: Dict):
     with col5:
         st.metric("📅 Período", summary.get('analysis_period', 'N/A'))
 
+def show_executive_dashboard(summary: Dict):
+    """NUEVA FUNCIÓN: Dashboard ejecutivo visual profesional"""
+    
+    # CSS personalizado para cards profesionales
+    st.markdown("""
+    <style>
+    .executive-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        margin: 10px 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .kpi-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        padding: 15px;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 5px;
+    }
+    .success-card {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        padding: 15px;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 5px;
+    }
+    .warning-card {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        padding: 15px;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 5px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Header ejecutivo
+    st.markdown("""
+    <div class="executive-card">
+        <h2 style="margin: 0; text-align: center;">🎯 DASHBOARD EJECUTIVO</h2>
+        <p style="margin: 5px 0; text-align: center; opacity: 0.9;">Análisis Comparativo de Tablillas - Alsina Forms Co.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # KPIs principales en cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <h3 style="margin: 0; font-size: 2em;">{summary.get('total_new_albaranes', 0)}</h3>
+            <p style="margin: 5px 0; font-size: 0.9em;">📈 NUEVOS ALBARANES</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="success-card">
+            <h3 style="margin: 0; font-size: 2em;">{summary.get('total_closed_albaranes', 0)}</h3>
+            <p style="margin: 5px 0; font-size: 0.9em;">✅ ALBARANES CERRADOS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="warning-card">
+            <h3 style="margin: 0; font-size: 2em;">{summary.get('total_closed_tablets', 0)}</h3>
+            <p style="margin: 5px 0; font-size: 0.9em;">🔒 TABLILLAS CERRADAS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <h3 style="margin: 0; font-size: 2em;">{summary.get('total_added_tablets', 0)}</h3>
+            <p style="margin: 5px 0; font-size: 0.9em;">➕ TABLILLAS AGREGADAS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Información adicional
+    st.markdown(f"""
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 10px 0;">
+        <h4 style="color: #495057; margin: 0 0 10px 0;">📊 INFORMACIÓN DEL ANÁLISIS</h4>
+        <p style="margin: 5px 0; color: #6c757d;"><strong>📅 Período:</strong> {summary.get('analysis_period', 'N/A')}</p>
+        <p style="margin: 5px 0; color: #6c757d;"><strong>📁 Archivos analizados:</strong> {summary.get('num_files_analyzed', 0)}</p>
+        <p style="margin: 5px 0; color: #6c757d;"><strong>📈 Fecha más reciente:</strong> {summary.get('most_recent_date', 'N/A')}</p>
+        <p style="margin: 5px 0; color: #6c757d;"><strong>📉 Fecha más antigua:</strong> {summary.get('oldest_date', 'N/A')}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 def show_temporal_evolution(open_evolution: List[Dict]):
-    """Mostrar evolución temporal"""
+    """Mostrar evolución temporal - VERSIÓN MEJORADA"""
     st.subheader("📈 Evolución de Tablillas Pendientes")
     
     if open_evolution:
         df_evolution = pd.DataFrame(open_evolution)
         df_evolution['date'] = pd.to_datetime(df_evolution['date'])
         
+        # NUEVO: Gráfico más profesional con colores corporativos
         fig = px.line(
             df_evolution,
             x='date',
             y='total_open',
-            title='Evolución Diaria de Tablillas Pendientes',
+            title='📊 Evolución Diaria de Tablillas Pendientes',
             markers=True,
-            color_discrete_sequence=['#dc3545']
+            color_discrete_sequence=['#667eea']
         )
         
+        # Mejoras visuales
         fig.update_layout(
-            xaxis_title="Fecha",
-            yaxis_title="Tablillas Pendientes",
-            hovermode='x unified'
+            xaxis_title="📅 Fecha",
+            yaxis_title="🔢 Tablillas Pendientes",
+            hovermode='x unified',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            title_font_size=16,
+            title_x=0.5,
+            margin=dict(l=50, r=50, t=80, b=50)
         )
+        
+        # Línea más gruesa y puntos
+        fig.update_traces(
+            line=dict(width=4),
+            marker=dict(size=8, color='#667eea'),
+            hovertemplate='<b>%{x}</b><br>Tablillas: %{y}<extra></extra>'
+        )
+        
+        # Grid más sutil
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
         
         st.plotly_chart(fig, use_container_width=True)
+        
+        # NUEVO: Métricas adicionales
+        if len(df_evolution) > 1:
+            show_evolution_metrics(df_evolution)
+
+def show_evolution_metrics(df_evolution: pd.DataFrame):
+    """NUEVA FUNCIÓN: Métricas de evolución temporal"""
+    
+    # Calcular métricas
+    total_change = df_evolution['total_open'].iloc[-1] - df_evolution['total_open'].iloc[0]
+    max_open = df_evolution['total_open'].max()
+    min_open = df_evolution['total_open'].min()
+    avg_open = df_evolution['total_open'].mean()
+    
+    # Determinar tendencia
+    if total_change > 0:
+        trend_icon = "📈"
+        trend_text = "CRECIENTE"
+        trend_color = "#dc3545"
+    elif total_change < 0:
+        trend_icon = "📉"
+        trend_text = "DECRECIENTE"
+        trend_color = "#28a745"
+    else:
+        trend_icon = "➡️"
+        trend_text = "ESTABLE"
+        trend_color = "#ffc107"
+    
+    # Mostrar métricas en cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 15px; border-radius: 10px; color: white; text-align: center;">
+            <h4 style="margin: 0; font-size: 1.5em;">{trend_icon}</h4>
+            <p style="margin: 5px 0; font-size: 0.9em;">TENDENCIA</p>
+            <p style="margin: 0; font-weight: bold;">{trend_text}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                    padding: 15px; border-radius: 10px; color: white; text-align: center;">
+            <h4 style="margin: 0; font-size: 1.5em;">{max_open}</h4>
+            <p style="margin: 5px 0; font-size: 0.9em;">MÁXIMO</p>
+            <p style="margin: 0; font-weight: bold;">TABLILLAS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); 
+                    padding: 15px; border-radius: 10px; color: white; text-align: center;">
+            <h4 style="margin: 0; font-size: 1.5em;">{min_open}</h4>
+            <p style="margin: 5px 0; font-size: 0.9em;">MÍNIMO</p>
+            <p style="margin: 0; font-weight: bold;">TABLILLAS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                    padding: 15px; border-radius: 10px; color: white; text-align: center;">
+            <h4 style="margin: 0; font-size: 1.5em;">{avg_open:.0f}</h4>
+            <p style="margin: 5px 0; font-size: 0.9em;">PROMEDIO</p>
+            <p style="margin: 0; font-weight: bold;">TABLILLAS</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 def show_daily_comparisons(comparisons: List[Dict]):
     """Mostrar comparaciones día a día"""
@@ -1666,67 +1854,132 @@ def show_warehouse_trends(wh_trends: Dict):
         st.plotly_chart(fig, use_container_width=True)
 
 def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
-    """Exportar informe profesional multi-días"""
+    """Exportar informe profesional multi-días - VERSIÓN MEJORADA"""
     output = io.BytesIO()
     
     try:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             
-            # HOJA 1: Resumen Ejecutivo
+            # HOJA 1: Dashboard Ejecutivo (MEJORADO)
             summary = analysis_results.get('summary', {})
+            
+            # Calcular métricas avanzadas
+            total_new = summary.get('total_new_albaranes', 0)
+            total_closed = summary.get('total_closed_albaranes', 0)
+            total_tablets_closed = summary.get('total_closed_tablets', 0)
+            total_tablets_added = summary.get('total_added_tablets', 0)
+            num_files = summary.get('num_files_analyzed', 1)
+            
+            # Métricas de performance
+            efficiency = (total_tablets_closed / max(total_tablets_closed + total_tablets_added, 1)) * 100
+            activity_score = (total_tablets_closed + total_tablets_added) / max(num_files, 1)
+            closure_rate = (total_closed / max(total_new + total_closed, 1)) * 100
+            
             executive_data = {
-                'Métrica': [
-                    'Período de Análisis',
-                    'Archivos Analizados',
-                    'Fecha Más Antigua',
-                    'Fecha Más Reciente',
-                    '🆕 Total Nuevos Albaranes',
-                    '✅ Total Albaranes Cerrados', 
-                    '🔒 Total Tablillas Cerradas',
-                    '➕ Total Tablillas Agregadas',
-                    '📊 Eficiencia de Cierre (%)',
-                    '🎯 Score de Actividad'
+                '📊 MÉTRICA': [
+                    '📅 Período de Análisis',
+                    '📁 Archivos Analizados',
+                    '📉 Fecha Más Antigua',
+                    '📈 Fecha Más Reciente',
+                    '',
+                    '🆕 NUEVOS ALBARANES',
+                    '✅ ALBARANES CERRADOS',
+                    '🔒 TABLILLAS CERRADAS',
+                    '➕ TABLILLAS AGREGADAS',
+                    '',
+                    '📊 EFICIENCIA DE CIERRE (%)',
+                    '🎯 SCORE DE ACTIVIDAD',
+                    '⚡ TASA DE CIERRE (%)',
+                    '📈 NETO TABLILLAS',
+                    '🔄 RATIO CIERRE/NUEVO'
                 ],
-                'Valor': [
+                '📈 VALOR': [
                     summary.get('analysis_period', 'N/A'),
                     summary.get('num_files_analyzed', 0),
                     summary.get('oldest_date', 'N/A'),
                     summary.get('most_recent_date', 'N/A'),
-                    summary.get('total_new_albaranes', 0),
-                    summary.get('total_closed_albaranes', 0),
-                    summary.get('total_closed_tablets', 0),
-                    summary.get('total_added_tablets', 0),
-                    f"{(summary.get('total_closed_tablets', 0) / max(summary.get('total_added_tablets', 0) + summary.get('total_closed_tablets', 0), 1) * 100):.1f}%",
-                    f"{(summary.get('total_closed_tablets', 0) + summary.get('total_added_tablets', 0)) / max(summary.get('num_files_analyzed', 1), 1):.1f}"
+                    '',
+                    total_new,
+                    total_closed,
+                    total_tablets_closed,
+                    total_tablets_added,
+                    '',
+                    f"{efficiency:.1f}%",
+                    f"{activity_score:.1f}",
+                    f"{closure_rate:.1f}%",
+                    total_tablets_closed - total_tablets_added,
+                    f"{total_closed / max(total_new, 1):.2f}" if total_new > 0 else "N/A"
+                ],
+                '💡 INTERPRETACIÓN': [
+                    'Período analizado',
+                    'Cantidad de archivos procesados',
+                    'Fecha del primer archivo',
+                    'Fecha del último archivo',
+                    '',
+                    'Albaranes nuevos en el período',
+                    'Albaranes completamente cerrados',
+                    'Tablillas cerradas en total',
+                    'Tablillas agregadas en total',
+                    '',
+                    'Porcentaje de tablillas cerradas vs agregadas',
+                    'Actividad promedio por archivo',
+                    'Porcentaje de albaranes cerrados vs nuevos',
+                    'Balance neto de tablillas',
+                    'Relación entre cierres y nuevos albaranes'
                 ]
             }
             executive_df = pd.DataFrame(executive_data)
-            executive_df.to_excel(writer, sheet_name='Resumen_Ejecutivo', index=False)
+            executive_df.to_excel(writer, sheet_name='🎯 Dashboard_Ejecutivo', index=False)
             
-            # HOJA 2: Evolución Diaria
+            # HOJA 2: Evolución Diaria (MEJORADA)
             if 'open_evolution' in summary:
                 evolution_df = pd.DataFrame(summary['open_evolution'])
-                evolution_df.to_excel(writer, sheet_name='Evolución_Diaria', index=False)
+                evolution_df['date'] = pd.to_datetime(evolution_df['date'])
+                
+                # Agregar métricas calculadas
+                evolution_df['cambio_diario'] = evolution_df['total_open'].diff()
+                evolution_df['cambio_porcentual'] = (evolution_df['total_open'].pct_change() * 100).round(2)
+                evolution_df['tendencia'] = evolution_df['cambio_diario'].apply(
+                    lambda x: '📈 CRECIENTE' if x > 0 else '📉 DECRECIENTE' if x < 0 else '➡️ ESTABLE'
+                )
+                
+                # Renombrar columnas para mejor presentación
+                evolution_df = evolution_df.rename(columns={
+                    'date': '📅 FECHA',
+                    'total_open': '🔢 TABLILLAS PENDIENTES',
+                    'cambio_diario': '📊 CAMBIO DIARIO',
+                    'cambio_porcentual': '📈 CAMBIO %',
+                    'tendencia': '🎯 TENDENCIA'
+                })
+                
+                evolution_df.to_excel(writer, sheet_name='📈 Evolución_Diaria', index=False)
             
-            # HOJA 3: Cambios Día a Día
+            # HOJA 3: Cambios Día a Día (MEJORADA)
             if 'comparisons' in analysis_results:
                 daily_changes = []
                 for comp in analysis_results['comparisons']:
+                    # Calcular métricas adicionales
+                    net_change = comp['current_total_open'] - comp['previous_total_open']
+                    efficiency = (comp['closed_tablets'] / max(comp['closed_tablets'] + comp.get('added_tablets', 0), 1)) * 100
+                    
                     daily_changes.append({
-                        'Fecha_Anterior': comp['previous_date'],
-                        'Fecha_Actual': comp['current_date'],
-                        'Nuevos_Albaranes': comp['new_albaranes'],
-                        'Albaranes_Cerrados': comp['closed_albaranes'],
-                        'Tablillas_Cerradas': comp['closed_tablets'],
-                        'Tablillas_Agregadas': comp.get('added_tablets', 0),
-                        'Albaranes_con_Agregados': comp.get('albaranes_with_added_tablets', 0),
-                        'Total_Pendientes_Anterior': comp['previous_total_open'],
-                        'Total_Pendientes_Actual': comp['current_total_open'],
-                        'Variación_Pendientes': comp['current_total_open'] - comp['previous_total_open']
+                        '📅 FECHA ANTERIOR': comp['previous_date'],
+                        '📅 FECHA ACTUAL': comp['current_date'],
+                        '🆕 NUEVOS ALBARANES': comp['new_albaranes'],
+                        '✅ ALBARANES CERRADOS': comp['closed_albaranes'],
+                        '🔒 TABLILLAS CERRADAS': comp['closed_tablets'],
+                        '➕ TABLILLAS AGREGADAS': comp.get('added_tablets', 0),
+                        '📊 NETO TABLILLAS': comp['closed_tablets'] - comp.get('added_tablets', 0),
+                        '📈 EFICIENCIA (%)': f"{efficiency:.1f}%",
+                        '🔢 TOTAL PENDIENTES ANTERIOR': comp['previous_total_open'],
+                        '🔢 TOTAL PENDIENTES ACTUAL': comp['current_total_open'],
+                        '📊 VARIACIÓN PENDIENTES': net_change,
+                        '🎯 TENDENCIA': '📈 CRECIENTE' if net_change > 0 else '📉 DECRECIENTE' if net_change < 0 else '➡️ ESTABLE',
+                        '⚡ ALBARANES CON AGREGADOS': comp.get('albaranes_with_added_tablets', 0)
                     })
                 
                 daily_changes_df = pd.DataFrame(daily_changes)
-                daily_changes_df.to_excel(writer, sheet_name='Cambios_Diarios', index=False)
+                daily_changes_df.to_excel(writer, sheet_name='🔄 Cambios_Diarios', index=False)
             
             # HOJA 4: Detalles de Cambios
             all_changes = []
