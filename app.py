@@ -420,7 +420,7 @@ class TablillasExtractor:
 
 def main():
     # Header
-    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co.</h1><p>Extracción especializada con Camelot-py (LA MEJOR OPCIÓN)</p></div>', 
+    st.markdown('<div class="main-header"><h1>🏗️ Control de Tablillas - Alsina Forms Co.</h1><p>Extracción especializada con Camelot-py (LA MEJOR OPCIÓN) - v2.0</p></div>', 
                 unsafe_allow_html=True)
     
     # Mostrar estado de dependencias
