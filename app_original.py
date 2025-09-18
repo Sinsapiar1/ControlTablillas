@@ -1033,18 +1033,41 @@ def show_excel_analysis_tab():
             if "error" not in analysis_results:
                 show_comparative_analysis(analysis_results, excel_data)
                 
-                # Opción de exportar informe profesional
+                # Opción de exportar informe profesional - VERSIÓN MEJORADA
                 st.markdown('<div class="section-header">💾 EXPORTAR INFORME PROFESIONAL</div>', 
                             unsafe_allow_html=True)
                 
+                # NUEVO: Usar st.download_button para evitar recarga de página
                 col1, col2 = st.columns(2)
+                
                 with col1:
-                    if st.button("📊 Informe Ejecutivo Multi-Días", type="primary"):
-                        export_professional_multi_day_report(analysis_results, excel_data)
+                    # Generar el Excel en memoria
+                    excel_data_bytes = export_professional_multi_day_report(analysis_results, excel_data)
+                    
+                    st.download_button(
+                        label="📊 Descargar Informe Ejecutivo Multi-Días",
+                        data=excel_data_bytes,
+                        file_name=f"Informe_Ejecutivo_MultiDias_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary",
+                        help="Descarga el informe ejecutivo sin perder el dashboard"
+                    )
                 
                 with col2:
-                    if st.button("📈 Análisis Completo de Tendencias", type="secondary"):
-                        export_comprehensive_trends_report(analysis_results, excel_data)
+                    # Generar el Excel de tendencias en memoria
+                    trends_data_bytes = export_comprehensive_trends_report(analysis_results, excel_data)
+                    
+                    st.download_button(
+                        label="📈 Descargar Análisis Completo de Tendencias",
+                        data=trends_data_bytes,
+                        file_name=f"Analisis_Tendencias_Completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="secondary",
+                        help="Descarga el análisis completo sin perder el dashboard"
+                    )
+                
+                # NUEVO: Mensaje informativo
+                st.info("💡 **Tip:** Los archivos se descargan directamente sin afectar el dashboard. ¡Puedes seguir analizando mientras descargas!")
             else:
                 st.error(analysis_results["error"])
         else:
@@ -1854,10 +1877,16 @@ def show_warehouse_trends(wh_trends: Dict):
         st.plotly_chart(fig, use_container_width=True)
 
 def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
-    """Exportar informe profesional multi-días - VERSIÓN MEJORADA"""
+    """Exportar informe profesional multi-días - VERSIÓN MEJORADA Y OPTIMIZADA"""
     output = io.BytesIO()
     
+    # NUEVO: Mostrar progreso de generación
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
     try:
+        status_text.text("🔄 Generando informe ejecutivo...")
+        progress_bar.progress(10)
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             
             # HOJA 1: Dashboard Ejecutivo (MEJORADO)
@@ -1931,6 +1960,9 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
             executive_df = pd.DataFrame(executive_data)
             executive_df.to_excel(writer, sheet_name='🎯 Dashboard_Ejecutivo', index=False)
             
+            status_text.text("📊 Procesando evolución diaria...")
+            progress_bar.progress(30)
+            
             # HOJA 2: Evolución Diaria (MEJORADA)
             if 'open_evolution' in summary:
                 evolution_df = pd.DataFrame(summary['open_evolution'])
@@ -1953,6 +1985,9 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
                 })
                 
                 evolution_df.to_excel(writer, sheet_name='📈 Evolución_Diaria', index=False)
+            
+            status_text.text("🔄 Procesando cambios diarios...")
+            progress_bar.progress(60)
             
             # HOJA 3: Cambios Día a Día (MEJORADA)
             if 'comparisons' in analysis_results:
@@ -1981,6 +2016,9 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
                 daily_changes_df = pd.DataFrame(daily_changes)
                 daily_changes_df.to_excel(writer, sheet_name='🔄 Cambios_Diarios', index=False)
             
+            status_text.text("📋 Procesando detalles de cambios...")
+            progress_bar.progress(80)
+            
             # HOJA 4: Detalles de Cambios
             all_changes = []
             for comp in analysis_results.get('comparisons', []):
@@ -1999,6 +2037,9 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
             if all_changes:
                 changes_detail_df = pd.DataFrame(all_changes)
                 changes_detail_df.to_excel(writer, sheet_name='Detalles_Cambios', index=False)
+            
+            status_text.text("🏢 Procesando análisis por almacén...")
+            progress_bar.progress(90)
             
             # HOJA 5: Análisis por Almacén
             warehouse_analysis = []
@@ -2026,22 +2067,24 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
                 warehouse_df = pd.DataFrame(warehouse_analysis)
                 warehouse_df.to_excel(writer, sheet_name='Análisis_Almacenes', index=False)
         
-        # Descargar
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-        filename = f"informe_profesional_tablillas_{timestamp}.xlsx"
+        # NUEVO: Completar progreso y limpiar indicadores
+        status_text.text("✅ Informe generado exitosamente!")
+        progress_bar.progress(100)
         
-        st.download_button(
-            label="📥 Descargar Informe Profesional",
-            data=output.getvalue(),
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        # Limpiar indicadores después de un momento
+        import time
+        time.sleep(1)
+        progress_bar.empty()
+        status_text.empty()
         
-        st.success(f"✅ Informe profesional generado: **{filename}**")
-        st.info("📊 Incluye: Resumen ejecutivo, evolución diaria, cambios detallados, análisis por almacén")
+        return output.getvalue()
         
     except Exception as e:
-        st.error(f"❌ Error generando informe: {str(e)}")
+        # Limpiar indicadores en caso de error
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"❌ Error generando Excel: {str(e)}")
+        return b''
 
 def export_comprehensive_trends_report(analysis_results: Dict, excel_data: Dict[str, pd.DataFrame]):
     """Exportar análisis completo de tendencias"""
