@@ -446,6 +446,10 @@ class TablillasExtractorPro:
         for i, table in enumerate(tables):
             st.write(f"🔍 Procesando tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
             
+            # Mostrar tabla raw para debugging
+            st.write(f"📋 **Tabla {i+1} RAW (primeras 3 filas):**")
+            st.dataframe(table.df.head(3), use_container_width=True)
+            
             df = table.df
             
             # Filtrar solo filas que empiecen con FL (datos de Alsina Forms)
@@ -453,7 +457,10 @@ class TablillasExtractorPro:
             
             if len(fl_rows) > 0:
                 st.write(f"✅ {len(fl_rows)} filas FL encontradas en tabla {i+1}")
-                all_data.append(fl_rows)
+                
+                # Procesar cada fila FL individualmente para corregir columnas mezcladas
+                processed_fl_rows = self._fix_mixed_columns(fl_rows)
+                all_data.append(processed_fl_rows)
         
         if not all_data:
             st.error("❌ No se encontraron filas con datos FL")
@@ -464,6 +471,82 @@ class TablillasExtractorPro:
         
         # Limpiar y estandarizar
         return self._clean_and_standardize_advanced(combined_df)
+    
+    def _fix_mixed_columns(self, fl_rows: pd.DataFrame) -> pd.DataFrame:
+        """Corregir columnas mezcladas en filas FL"""
+        corrected_rows = []
+        
+        for idx, row in fl_rows.iterrows():
+            try:
+                # Convertir toda la fila a string y unir
+                row_text = ' '.join([str(cell) for cell in row if pd.notna(cell) and str(cell).strip()])
+                
+                # Patrón para extraer datos de fila FL
+                # FL 612D 729000018764 9/18/2025 40036645 FL052 8/31/2025 9/30/2025 Thales Builders Corp Residences at Martin Mano No 279, 282, 287 3 279A, 282T, 287T 3 0 0
+                pattern = r'FL\s+(\w+)\s+(\d+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+(\w+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+(.+?)\s+No\s+(.+?)\s+(\d+)\s+(.+?)\s+(\d+)\s+(\d+)\s+(\d+)'
+                
+                match = re.search(pattern, row_text)
+                
+                if match:
+                    # Extraer datos usando regex
+                    wh_code = match.group(1)
+                    albaran = match.group(2)
+                    return_date = match.group(3)
+                    customer_id = match.group(4)
+                    fl_code = match.group(5)
+                    counting_date = match.group(6)
+                    validation_date = match.group(7)
+                    customer_name = match.group(8).strip()
+                    tablet_numbers = match.group(9).strip()
+                    total_tablets = int(match.group(10))
+                    tablet_codes = match.group(11).strip()
+                    total_open = int(match.group(12))
+                    counting_delay = int(match.group(13))
+                    validation_delay = int(match.group(14))
+                    
+                    # Crear fila corregida
+                    corrected_row = {
+                        'WH_Code': wh_code,
+                        'Return_Packing_Slip': albaran,
+                        'Return_Date': return_date,
+                        'Customer_ID': customer_id,
+                        'FL_Code': fl_code,
+                        'Counting_Date': counting_date,
+                        'Validation_Date': validation_date,
+                        'Customer_Name': customer_name,
+                        'Tablet_Numbers': tablet_numbers,
+                        'Total_Tablets': total_tablets,
+                        'Tablet_Codes': tablet_codes,
+                        'Total_Open': total_open,
+                        'Counting_Delay': counting_delay,
+                        'Validation_Delay': validation_delay
+                    }
+                    
+                    corrected_rows.append(corrected_row)
+                    st.write(f"✅ Fila corregida: {albaran} - {customer_name}")
+                    
+                else:
+                    # Si no coincide el patrón, intentar extraer datos básicos
+                    st.write(f"⚠️ No se pudo corregir fila: {row_text[:100]}...")
+                    
+                    # Intentar extraer al menos el albarán
+                    albaran_match = re.search(r'(\d{12})', row_text)
+                    if albaran_match:
+                        albaran = albaran_match.group(1)
+                        # Usar datos originales pero con albarán corregido
+                        original_row = row.to_dict()
+                        original_row['Return_Packing_Slip'] = albaran
+                        corrected_rows.append(original_row)
+                        st.write(f"🔄 Fila parcialmente corregida: {albaran}")
+                    
+            except Exception as e:
+                st.write(f"❌ Error corrigiendo fila {idx}: {str(e)}")
+                continue
+        
+        if corrected_rows:
+            return pd.DataFrame(corrected_rows)
+        else:
+            return fl_rows  # Devolver original si no se pudo corregir nada
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza y estandarización avanzada"""
