@@ -375,11 +375,35 @@ class TablillasExtractorPro:
                 except Exception as e:
                     st.write(f"Lattice falló: {str(e)}")
             
+            # Si ambos métodos fallan, intentar con páginas específicas
+            if not tables or len(tables) == 0:
+                try:
+                    st.info("🔄 Intentando con páginas específicas...")
+                    # Intentar página por página
+                    for page_num in range(1, 6):  # Intentar primeras 5 páginas
+                        try:
+                            page_tables = camelot.read_pdf(tmp_file_path, pages=str(page_num), flavor='stream')
+                            if page_tables and len(page_tables) > 0:
+                                st.write(f"📊 Página {page_num}: {len(page_tables)} tablas encontradas")
+                                if tables is None:
+                                    tables = page_tables
+                                else:
+                                    tables.extend(page_tables)
+                        except Exception as e:
+                            st.write(f"Página {page_num} falló: {str(e)}")
+                            continue
+                except Exception as e:
+                    st.write(f"Búsqueda por páginas falló: {str(e)}")
+            
             # Limpiar archivo temporal
             os.unlink(tmp_file_path)
             
             if not tables or len(tables) == 0:
                 st.error("❌ No se encontraron tablas en el PDF")
+                st.info("💡 **Sugerencias:**")
+                st.write("- Verifica que el PDF contenga tablas estructuradas")
+                st.write("- Asegúrate de que el archivo no esté protegido")
+                st.write("- Intenta con un PDF de ejemplo conocido")
                 return None
             
             # Procesar tablas encontradas
