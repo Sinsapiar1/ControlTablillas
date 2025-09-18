@@ -504,7 +504,7 @@ class TablillasExtractorPro:
                     counting_delay = int(match.group(13))
                     validation_delay = int(match.group(14))
                     
-                    # Crear fila corregida
+                    # Crear fila corregida con todas las columnas necesarias
                     corrected_row = {
                         'WH_Code': wh_code,
                         'Return_Packing_Slip': albaran,
@@ -519,7 +519,12 @@ class TablillasExtractorPro:
                         'Tablet_Codes': tablet_codes,
                         'Total_Open': total_open,
                         'Counting_Delay': counting_delay,
-                        'Validation_Delay': validation_delay
+                        'Validation_Delay': validation_delay,
+                        # Agregar columnas calculadas que necesita el análisis visual
+                        'Days_Since_Return': 0,  # Se calculará después
+                        'Priority_Score': 0,     # Se calculará después
+                        'Slip_Age_Rank': 0,      # Se calculará después
+                        'Priority_Level': 'Media' # Valor por defecto
                     }
                     
                     corrected_rows.append(corrected_row)
@@ -536,6 +541,17 @@ class TablillasExtractorPro:
                         # Usar datos originales pero con albarán corregido
                         original_row = row.to_dict()
                         original_row['Return_Packing_Slip'] = albaran
+                        
+                        # Asegurar que tiene las columnas necesarias
+                        if 'Days_Since_Return' not in original_row:
+                            original_row['Days_Since_Return'] = 0
+                        if 'Priority_Score' not in original_row:
+                            original_row['Priority_Score'] = 0
+                        if 'Slip_Age_Rank' not in original_row:
+                            original_row['Slip_Age_Rank'] = 0
+                        if 'Priority_Level' not in original_row:
+                            original_row['Priority_Level'] = 'Media'
+                            
                         corrected_rows.append(original_row)
                         st.write(f"🔄 Fila parcialmente corregida: {albaran}")
                     
