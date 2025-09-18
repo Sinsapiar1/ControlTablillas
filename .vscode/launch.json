@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🏭 Control Tablillas - Streamlit",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/app_local.py",
+            "console": "integratedTerminal",
+            "args": ["run", "--server.port", "8501", "--server.address", "localhost"],
+            "module": "streamlit",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "🏭 Control Tablillas - Install",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/install_local.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

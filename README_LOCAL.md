@@ -184,12 +184,21 @@ streamlit run app_local.py --server.port 8502
 
 ```
 control-tablillas-local/
-├── app_local.py              # Aplicación principal
-├── requirements_local.txt    # Dependencias para local
-├── README_LOCAL.md          # Este archivo
-└── data/                    # Carpeta para archivos de prueba (opcional)
-    ├── sample.pdf
-    └── sample.xlsx
+├── app_local.py              # 🏭 Aplicación principal
+├── requirements_local.txt    # 📦 Dependencias para local
+├── README_LOCAL.md          # 📚 Este archivo
+├── install_local.py         # 🔧 Script de instalación automática
+├── run_local.py             # 🚀 Script de inicio rápido
+├── start_local.bat          # 🪟 Script para Windows
+├── start_local.sh           # 🐧 Script para macOS/Linux
+├── .streamlit/
+│   └── config.toml          # ⚙️ Configuración de Streamlit
+├── .vscode/
+│   ├── launch.json          # 🎯 Configuración de debug VS Code
+│   └── tasks.json           # 📋 Tareas personalizadas VS Code
+├── .gitignore               # 🚫 Archivos a ignorar
+└── data/                    # 📁 Carpeta para archivos de prueba
+    └── README_DATA.md       # 📝 Documentación de datos
 ```
 
 ## 🎯 Uso Rápido
