@@ -223,81 +223,81 @@ class ExcelAnalyzer:
             # Albaranes actuales y anteriores
             current_albaranes = set(current_df['Return_Packing_Slip'].astype(str))
             previous_albaranes = set(previous_df['Return_Packing_Slip'].astype(str))
-        
-        # Calcular cambios
-        new_albaranes = current_albaranes - previous_albaranes
-        closed_albaranes = previous_albaranes - current_albaranes
-        continuing_albaranes = current_albaranes.intersection(previous_albaranes)
-        
-        # Análisis detallado de cambios en albaranes
-        closed_tablets = 0
-        added_tablets = 0
-        changed_albaranes = []
-        
-        for albaran in continuing_albaranes:
-            current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
-            previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
             
-            if not current_row.empty and not previous_row.empty:
-                # Datos actuales
-                current_open = pd.to_numeric(current_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
-                current_total = pd.to_numeric(current_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
-                current_tablets_list = str(current_row.iloc[0].get('Tablets', ''))
+            # Calcular cambios
+            new_albaranes = current_albaranes - previous_albaranes
+            closed_albaranes = previous_albaranes - current_albaranes
+            continuing_albaranes = current_albaranes.intersection(previous_albaranes)
+            
+            # Análisis detallado de cambios en albaranes
+            closed_tablets = 0
+            added_tablets = 0
+            changed_albaranes = []
+            
+            for albaran in continuing_albaranes:
+                current_row = current_df[current_df['Return_Packing_Slip'].astype(str) == albaran]
+                previous_row = previous_df[previous_df['Return_Packing_Slip'].astype(str) == albaran]
                 
-                # Datos anteriores  
-                previous_open = pd.to_numeric(previous_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
-                previous_total = pd.to_numeric(previous_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
-                previous_tablets_list = str(previous_row.iloc[0].get('Tablets', ''))
-                
-                # Análisis de cambios
-                change_info = {
-                    'albaran': albaran,
-                    'customer': current_row.iloc[0].get('Customer_Name', 'N/A'),
-                    'previous_open': previous_open,
-                    'current_open': current_open,
-                    'previous_total': previous_total,
-                    'current_total': current_total,
-                    'changes': []
-                }
-                
-                # 1. Detectar tablillas cerradas (reducción en Open)
-                if previous_open > current_open:
-                    tablets_closed_count = previous_open - current_open
-                    closed_tablets += tablets_closed_count
-                    change_info['changes'].append(f"🔒 {tablets_closed_count} tablillas cerradas")
-                
-                # 2. Detectar tablillas agregadas (aumento en Total)
-                if current_total > previous_total:
-                    tablets_added_count = current_total - previous_total
-                    added_tablets += tablets_added_count
-                    change_info['changes'].append(f"➕ {tablets_added_count} tablillas agregadas")
-                
-                # 3. Detectar cambios en lista de tablillas
-                if current_tablets_list != previous_tablets_list and current_tablets_list and previous_tablets_list:
-                    change_info['changes'].append(f"📝 Lista de tablillas modificada")
-                    change_info['previous_tablets'] = previous_tablets_list
-                    change_info['current_tablets'] = current_tablets_list
-                
-                # Solo agregar si hay cambios
-                if change_info['changes']:
-                    changed_albaranes.append(change_info)
-        
-        return {
-            'current_date': current_date,
-            'previous_date': previous_date,
-            'new_albaranes': len(new_albaranes),
-            'closed_albaranes': len(closed_albaranes),
-            'closed_tablets': closed_tablets,
-            'added_tablets': added_tablets,  # NUEVO
-            'new_albaranes_list': list(new_albaranes),
-            'closed_albaranes_list': list(closed_albaranes),
-            'changed_albaranes': changed_albaranes,
-            'current_total_open': current_df['Total_Open'].sum() if 'Total_Open' in current_df.columns else 0,
-            'previous_total_open': previous_df['Total_Open'].sum() if 'Total_Open' in previous_df.columns else 0,
-            'current_total_albaranes': len(current_df),
-            'previous_total_albaranes': len(previous_df),
-            'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])  # NUEVO
-        }
+                if not current_row.empty and not previous_row.empty:
+                    # Datos actuales
+                    current_open = pd.to_numeric(current_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                    current_total = pd.to_numeric(current_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                    current_tablets_list = str(current_row.iloc[0].get('Tablets', ''))
+                    
+                    # Datos anteriores  
+                    previous_open = pd.to_numeric(previous_row.iloc[0].get('Total_Open', 0), errors='coerce') or 0
+                    previous_total = pd.to_numeric(previous_row.iloc[0].get('Total_Tablets', 0), errors='coerce') or 0
+                    previous_tablets_list = str(previous_row.iloc[0].get('Tablets', ''))
+                    
+                    # Análisis de cambios
+                    change_info = {
+                        'albaran': albaran,
+                        'customer': current_row.iloc[0].get('Customer_Name', 'N/A'),
+                        'previous_open': previous_open,
+                        'current_open': current_open,
+                        'previous_total': previous_total,
+                        'current_total': current_total,
+                        'changes': []
+                    }
+                    
+                    # 1. Detectar tablillas cerradas (reducción en Open)
+                    if previous_open > current_open:
+                        tablets_closed_count = previous_open - current_open
+                        closed_tablets += tablets_closed_count
+                        change_info['changes'].append(f"🔒 {tablets_closed_count} tablillas cerradas")
+                    
+                    # 2. Detectar tablillas agregadas (aumento en Total)
+                    if current_total > previous_total:
+                        tablets_added_count = current_total - previous_total
+                        added_tablets += tablets_added_count
+                        change_info['changes'].append(f"➕ {tablets_added_count} tablillas agregadas")
+                    
+                    # 3. Detectar cambios en lista de tablillas
+                    if current_tablets_list != previous_tablets_list and current_tablets_list and previous_tablets_list:
+                        change_info['changes'].append(f"📝 Lista de tablillas modificada")
+                        change_info['previous_tablets'] = previous_tablets_list
+                        change_info['current_tablets'] = current_tablets_list
+                    
+                    # Solo agregar si hay cambios
+                    if change_info['changes']:
+                        changed_albaranes.append(change_info)
+            
+            return {
+                'current_date': current_date,
+                'previous_date': previous_date,
+                'new_albaranes': len(new_albaranes),
+                'closed_albaranes': len(closed_albaranes),
+                'closed_tablets': closed_tablets,
+                'added_tablets': added_tablets,
+                'new_albaranes_list': list(new_albaranes),
+                'closed_albaranes_list': list(closed_albaranes),
+                'changed_albaranes': changed_albaranes,
+                'current_total_open': current_df['Total_Open'].sum() if 'Total_Open' in current_df.columns else 0,
+                'previous_total_open': previous_df['Total_Open'].sum() if 'Total_Open' in previous_df.columns else 0,
+                'current_total_albaranes': len(current_df),
+                'previous_total_albaranes': len(previous_df),
+                'albaranes_with_added_tablets': len([c for c in changed_albaranes if any('agregadas' in change for change in c['changes'])])
+            }
         
         except Exception as e:
             st.error(f"❌ Error comparando {previous_date} vs {current_date}: {str(e)}")
