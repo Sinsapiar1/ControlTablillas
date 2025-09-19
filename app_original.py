@@ -732,11 +732,42 @@ class TablillasExtractorPro:
             if 'Slip_Age_Rank' not in df.columns:
                 df['Slip_Age_Rank'] = 0
             
-            # Días desde retorno
+            # Días desde retorno - NUEVA LÓGICA CON Counted_Date
             if 'Return_Date' in df.columns:
                 try:
-                    df['Days_Since_Return'] = (current_date - df['Return_Date']).dt.days
+                    # Para albaranes cerrados (Total_Open = 0): usar Counted_Date - Return_Date
+                    # Para albaranes abiertos (Total_Open > 0): usar current_date - Return_Date
+                    df['Days_Since_Return'] = 0
+                    
+                    # Albaranes cerrados: usar Counted_Date si está disponible
+                    closed_mask = df.get('Total_Open', pd.Series([0])) == 0
+                    if 'Counted_Date' in df.columns:
+                        # Para albaranes cerrados con Counted_Date válida
+                        closed_with_counted = closed_mask & df['Counted_Date'].notna()
+                        df.loc[closed_with_counted, 'Days_Since_Return'] = (
+                            df.loc[closed_with_counted, 'Counted_Date'] - 
+                            df.loc[closed_with_counted, 'Return_Date']
+                        ).dt.days
+                        
+                        # Para albaranes cerrados sin Counted_Date, usar current_date
+                        closed_without_counted = closed_mask & df['Counted_Date'].isna()
+                        df.loc[closed_without_counted, 'Days_Since_Return'] = (
+                            current_date - df.loc[closed_without_counted, 'Return_Date']
+                        ).dt.days
+                    else:
+                        # Si no hay Counted_Date, usar current_date para cerrados
+                        df.loc[closed_mask, 'Days_Since_Return'] = (
+                            current_date - df.loc[closed_mask, 'Return_Date']
+                        ).dt.days
+                    
+                    # Albaranes abiertos: siempre usar current_date
+                    open_mask = df.get('Total_Open', pd.Series([0])) > 0
+                    df.loc[open_mask, 'Days_Since_Return'] = (
+                        current_date - df.loc[open_mask, 'Return_Date']
+                    ).dt.days
+                    
                     df['Days_Since_Return'] = df['Days_Since_Return'].fillna(0)
+                    
                 except Exception as e:
                     st.warning(f"⚠️ Error calculando días desde retorno: {str(e)}")
                     df['Days_Since_Return'] = 0
@@ -1964,7 +1995,7 @@ def show_performance_metrics(df: pd.DataFrame):
     with col2:
         st.metric("⏰ Antigüedad Promedio", 
                  f"{avg_age:.1f} días",
-                 help="Días promedio desde retorno")
+                 help="Días promedio para cerrar albaranes: cerrados (Counted_Date - Return_Date), abiertos (hoy - Return_Date)")
     
     with col3:
         st.metric("🚨 Items Críticos", 
