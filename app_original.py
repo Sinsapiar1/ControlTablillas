@@ -1636,9 +1636,9 @@ def show_warehouse_analysis(df: pd.DataFrame):
         st.info("📋 No hay información de almacenes para analizar")
         return
     
-    # Preparar datos por almacén
+    # Preparar datos por almacén - CORREGIDO para incluir albaranes cerrados
     wh_summary = df.groupby('WH_Code').agg({
-        'Total_Open': 'sum',
+        'Total_Open': ['sum', lambda x: (x == 0).sum()],  # Suma de pendientes + conteo de cerrados
         'Total_Tablets': 'sum',
         'Counting_Delay': ['mean', 'max'],
         'Validation_Delay': 'mean',
@@ -1648,13 +1648,13 @@ def show_warehouse_analysis(df: pd.DataFrame):
     }).round(2)
     
     # Aplanar columnas multinivel
-    wh_summary.columns = ['Pendientes', 'Total_Tablillas', 'Retraso_Prom', 'Retraso_Max', 
+    wh_summary.columns = ['Pendientes', 'Albaranes_Cerrados', 'Total_Tablillas', 'Retraso_Prom', 'Retraso_Max', 
                          'Val_Delay_Prom', 'Num_Albaranes', 'Días_Prom', 'Score_Prom']
     wh_summary = wh_summary.reset_index()
     
-    # Calcular métricas adicionales
-    wh_summary['Eficiencia'] = ((wh_summary['Total_Tablillas'] - wh_summary['Pendientes']) / 
-                               wh_summary['Total_Tablillas'] * 100).round(1)
+    # Calcular métricas adicionales - CORREGIDO para usar lógica de albaranes cerrados
+    # Eficiencia = Albaranes cerrados / Total albaranes
+    wh_summary['Eficiencia'] = (wh_summary['Albaranes_Cerrados'] / wh_summary['Num_Albaranes'] * 100).round(1)
     wh_summary['Urgencia'] = (wh_summary['Días_Prom'] + wh_summary['Retraso_Prom']).round(1)
     
     col1, col2 = st.columns(2)
@@ -1938,8 +1938,12 @@ def show_performance_metrics(df: pd.DataFrame):
     total_pending = df.get('Total_Open', pd.Series([0])).sum()
     total_tablets = df.get('Total_Tablets', pd.Series([0])).sum()
     
-    if total_tablets > 0:
-        completion_rate = ((total_tablets - total_pending) / total_tablets * 100)
+    # CORREGIDO: Tasa de Finalización = Albaranes cerrados / Total albaranes
+    # Un albarán está cerrado cuando Total_Open = 0
+    closed_albaranes = len(df[df.get('Total_Open', pd.Series([0])) == 0])
+    
+    if total_albaranes > 0:
+        completion_rate = (closed_albaranes / total_albaranes * 100)
     else:
         completion_rate = 0
     
@@ -1955,7 +1959,7 @@ def show_performance_metrics(df: pd.DataFrame):
     with col1:
         st.metric("📊 Tasa de Finalización", 
                  f"{completion_rate:.1f}%",
-                 help="Porcentaje de tablillas completadas vs total")
+                 help="Porcentaje de albaranes cerrados (Total_Open = 0) vs total de albaranes")
     
     with col2:
         st.metric("⏰ Antigüedad Promedio", 
@@ -2064,8 +2068,9 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
             total_tablets_added = summary.get('total_added_tablets', 0)
             num_files = summary.get('num_files_analyzed', 1)
             
-            # Métricas de performance
-            efficiency = (total_tablets_closed / max(total_tablets_closed + total_tablets_added, 1)) * 100
+            # Métricas de performance - CORREGIDO para usar lógica de albaranes cerrados
+            # Eficiencia = Albaranes cerrados / (Albaranes cerrados + Albaranes nuevos)
+            efficiency = (total_closed / max(total_closed + total_new, 1)) * 100
             activity_score = (total_tablets_closed + total_tablets_added) / max(num_files, 1)
             closure_rate = (total_closed / max(total_new + total_closed, 1)) * 100
             
@@ -2158,9 +2163,10 @@ def export_professional_multi_day_report(analysis_results: Dict, excel_data: Dic
             if 'comparisons' in analysis_results:
                 daily_changes = []
                 for comp in analysis_results['comparisons']:
-                    # Calcular métricas adicionales
+                    # Calcular métricas adicionales - CORREGIDO para usar lógica de albaranes cerrados
                     net_change = comp['current_total_open'] - comp['previous_total_open']
-                    efficiency = (comp['closed_tablets'] / max(comp['closed_tablets'] + comp.get('added_tablets', 0), 1)) * 100
+                    # Eficiencia = Albaranes cerrados / (Albaranes cerrados + Albaranes nuevos)
+                    efficiency = (comp['closed_albaranes'] / max(comp['closed_albaranes'] + comp['new_albaranes'], 1)) * 100
                     
                     daily_changes.append({
                         '📅 FECHA ANTERIOR': comp['previous_date'],
