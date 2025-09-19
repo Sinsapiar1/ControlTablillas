@@ -794,14 +794,40 @@ class TablillasExtractorPro:
                     # Asegurar que son numéricas
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-            # Score de prioridad mejorado
-            df['Priority_Score'] = (
-                pd.to_numeric(df['Days_Since_Return'], errors='coerce').fillna(0) * 0.3 +
-                pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0) * 0.25 +
-                pd.to_numeric(df['Validation_Delay'], errors='coerce').fillna(0) * 0.2 +
-                pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0) * 0.15 +
-                pd.to_numeric(df['Slip_Age_Rank'], errors='coerce').fillna(0) * 0.1
-            )
+            # Score de prioridad mejorado - VERSIÓN ROBUSTA
+            # Calcular score basado en datos disponibles
+            score_components = []
+            weights = []
+            
+            # Días desde retorno (siempre disponible)
+            if 'Days_Since_Return' in df.columns:
+                days_score = pd.to_numeric(df['Days_Since_Return'], errors='coerce').fillna(0)
+                score_components.append(days_score)
+                weights.append(0.4)
+            
+            # Tablillas abiertas (siempre disponible)
+            if 'Total_Open' in df.columns:
+                open_score = pd.to_numeric(df['Total_Open'], errors='coerce').fillna(0)
+                score_components.append(open_score)
+                weights.append(0.3)
+            
+            # Delays (si están disponibles)
+            if 'Counting_Delay' in df.columns:
+                counting_score = pd.to_numeric(df['Counting_Delay'], errors='coerce').fillna(0)
+                score_components.append(counting_score)
+                weights.append(0.2)
+            
+            if 'Validation_Delay' in df.columns:
+                validation_score = pd.to_numeric(df['Validation_Delay'], errors='coerce').fillna(0)
+                score_components.append(validation_score)
+                weights.append(0.1)
+            
+            # Calcular score ponderado
+            if score_components:
+                df['Priority_Score'] = sum(comp * weight for comp, weight in zip(score_components, weights))
+            else:
+                # Fallback: usar solo días desde retorno
+                df['Priority_Score'] = pd.to_numeric(df.get('Days_Since_Return', pd.Series([0])), errors='coerce').fillna(0)
             
             # Asegurar que Priority_Score es numérico
             df['Priority_Score'] = pd.to_numeric(df['Priority_Score'], errors='coerce').fillna(0)
@@ -1015,7 +1041,7 @@ def show_main_data_table(df: pd.DataFrame):
     display_columns = [
         'Return_Packing_Slip', 'Return_Date', 'Customer_Name', 'Job_Site_Name',
         'WH_Code', 'Total_Tablets', 'Total_Open', 'Days_Since_Return', 
-        'Priority_Level', 'Urgency_Category'
+        'Counted_Date', 'Priority_Level', 'Urgency_Category'
     ]
     
     available_columns = [col for col in display_columns if col in df.columns]
@@ -2006,6 +2032,20 @@ def show_performance_metrics(df: pd.DataFrame):
         st.metric("📅 Del Mes Anterior", 
                  old_month_count,
                  help="Albaranes que vienen del mes anterior")
+    
+    # Nota explicativa sobre el cálculo de antigüedad
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 15px; border-radius: 10px; margin: 10px 0; color: white;">
+        <h4 style="margin: 0 0 10px 0; color: white;">📊 ¿Cómo se calcula la Antigüedad Promedio?</h4>
+        <p style="margin: 0; font-size: 14px;">
+            <strong>🎯 Lógica Inteligente:</strong><br>
+            • <strong>Albaranes Cerrados</strong> (Total_Open = 0): Días entre <em>Return_Date</em> y <em>Counted_Date</em><br>
+            • <strong>Albaranes Abiertos</strong> (Total_Open > 0): Días entre <em>Return_Date</em> y hoy<br>
+            <em>💡 Counted_Date = Fecha definitiva de cierre (no se puede reabrir)</em>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Alertas de rendimiento
     if completion_rate < 70:
