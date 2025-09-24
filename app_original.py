@@ -513,75 +513,151 @@ class TablillasExtractorPro:
         all_tables = []
         successful_methods = []
         
-        # MÉTODO 1: Stream con configuraciones optimizadas para páginas múltiples
+        # MÉTODO 1: Stream Agresivo (del extractor pro)
         try:
+            st.info("🔄 Probando método Stream Agresivo...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
                 flavor='stream',
-                edge_tol=500,           # Tolerancia para detectar bordes
-                row_tol=10,             # Tolerancia para separar filas
-                column_tol=0,           # Tolerancia estricta para columnas
-                split_text=True,        # Dividir texto en celdas
-                flag_size=True          # Marcar tamaños de fuente
+                edge_tol=500,
+                row_tol=10,
+                column_tol=0,
+                split_text=True,
+                flag_size=True
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Optimizado")
-                st.write(f"✅ Stream Optimizado: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Agresivo")
+                st.success(f"✅ Stream Agresivo: {len(tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Stream Agresivo: No se encontraron tablas")
         except Exception as e:
-            st.write(f"Stream Optimizado falló: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Agresivo: {str(e)}")
         
-        # MÉTODO 2: Stream con configuraciones específicas para páginas problemáticas
+        # MÉTODO 2: Stream Estándar (del extractor pro)
         try:
+            st.info("🔄 Probando método Stream Estándar...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='stream'
+            )
+            if len(tables) > 0:
+                for table in tables:
+                    if not self._is_duplicate_table(table, all_tables):
+                        all_tables.append(table)
+                successful_methods.append("Stream Estándar")
+                st.success(f"✅ Stream Estándar: {len(tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Stream Estándar: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Stream Estándar: {str(e)}")
+        
+        # MÉTODO 3: Stream Ajustado (del extractor pro)
+        try:
+            st.info("🔄 Probando método Stream Ajustado...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
                 flavor='stream',
-                edge_tol=300,           # Tolerancia más estricta
-                row_tol=5,              # Tolerancia más estricta para filas
-                column_tol=5,           # Tolerancia para columnas
-                split_text=True,
-                flag_size=True,
-                table_areas=['0,1000,1000,0']  # Área específica de tabla
+                edge_tol=200,
+                row_tol=5,
+                column_tol=3
             )
             if len(tables) > 0:
-                # Solo agregar si no duplicamos tablas
-                new_tables = [t for t in tables if not self._is_duplicate_table(t, all_tables)]
-                all_tables.extend(new_tables)
-                if new_tables:
-                    successful_methods.append("Stream Específico")
-                    st.write(f"✅ Stream Específico: {len(new_tables)} tablas adicionales encontradas")
+                for table in tables:
+                    if not self._is_duplicate_table(table, all_tables):
+                        all_tables.append(table)
+                successful_methods.append("Stream Ajustado")
+                st.success(f"✅ Stream Ajustado: {len(tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Stream Ajustado: No se encontraron tablas")
         except Exception as e:
-            st.write(f"Stream Específico falló: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Ajustado: {str(e)}")
         
-        # MÉTODO 3: Stream básico (fallback)
-        if not all_tables:
-            try:
-                tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
-                if len(tables) > 0:
-                    all_tables.extend(tables)
-                    successful_methods.append("Stream Básico")
-                    st.write(f"✅ Stream Básico: {len(tables)} tablas encontradas")
-            except Exception as e:
-                st.write(f"Stream Básico falló: {str(e)}")
+        # MÉTODO 4: Lattice Estándar (del extractor pro)
+        try:
+            st.info("🔄 Probando método Lattice Estándar...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='lattice',
+                process_background=True
+            )
+            if len(tables) > 0:
+                for table in tables:
+                    if not self._is_duplicate_table(table, all_tables):
+                        all_tables.append(table)
+                successful_methods.append("Lattice Estándar")
+                st.success(f"✅ Lattice Estándar: {len(tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Lattice Estándar: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Lattice Estándar: {str(e)}")
         
-        # MÉTODO 4: Lattice con configuraciones optimizadas
-        if not all_tables:
+        # MÉTODO 5: Lattice Detallado (del extractor pro)
+        try:
+            st.info("🔄 Probando método Lattice Detallado...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='lattice',
+                process_background=True,
+                line_scale=40,
+                iterations=2
+            )
+            if len(tables) > 0:
+                for table in tables:
+                    if not self._is_duplicate_table(table, all_tables):
+                        all_tables.append(table)
+                successful_methods.append("Lattice Detallado")
+                st.success(f"✅ Lattice Detallado: {len(tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Lattice Detallado: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Lattice Detallado: {str(e)}")
+        
+        # MÉTODO 6: Híbrido (del extractor pro)
+        try:
+            st.info("🔄 Probando método Híbrido...")
+            hybrid_tables = []
+            
+            # Stream del híbrido
             try:
-                tables = camelot.read_pdf(
-                    tmp_file_path, 
-                    pages='all', 
-                    flavor='lattice',
-                    process_background=True,   # Procesar fondo
-                    line_scale=15             # Escala de líneas
+                stream_tables = camelot.read_pdf(
+                    tmp_file_path,
+                    pages='all',
+                    flavor='stream',
+                    edge_tol=500
                 )
-                if len(tables) > 0:
-                    all_tables.extend(tables)
-                    successful_methods.append("Lattice Optimizado")
-                    st.write(f"✅ Lattice Optimizado: {len(tables)} tablas encontradas")
-            except Exception as e:
-                st.write(f"Lattice Optimizado falló: {str(e)}")
+                if stream_tables:
+                    hybrid_tables.extend(stream_tables)
+            except:
+                pass
+            
+            # Lattice del híbrido
+            try:
+                lattice_tables = camelot.read_pdf(
+                    tmp_file_path,
+                    pages='all',
+                    flavor='lattice'
+                )
+                if lattice_tables:
+                    hybrid_tables.extend(lattice_tables)
+            except:
+                pass
+            
+            if len(hybrid_tables) > 0:
+                for table in hybrid_tables:
+                    if not self._is_duplicate_table(table, all_tables):
+                        all_tables.append(table)
+                successful_methods.append("Híbrido")
+                st.success(f"✅ Híbrido: {len(hybrid_tables)} tablas encontradas")
+            else:
+                st.warning("⚠️ Híbrido: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Híbrido: {str(e)}")
         
         return all_tables, successful_methods
     
@@ -1455,6 +1531,47 @@ class TablillasExtractorPro:
                         
         except Exception as e:
             st.warning(f"⚠️ Error analizando diferencias de columnas: {str(e)}")
+    
+    def _validate_simple_extraction(self, df: pd.DataFrame):
+        """Validación simple basada en el extractor pro"""
+        if df is None or df.empty:
+            st.error("❌ DataFrame vacío")
+            return
+        
+        try:
+            total_rows = len(df)
+            slip_count = 0
+            
+            for idx in df.index:
+                row_text = ' '.join(str(cell) for cell in df.iloc[idx].values if pd.notna(cell))
+                if '729000018' in row_text:
+                    slip_count += 1
+            
+            st.info(f"📊 Filas extraídas: {total_rows}")
+            st.info(f"📊 Slips encontrados: {slip_count}")
+            
+            # Calcular totales si es posible
+            if len(df.columns) > 15:
+                try:
+                    total_13 = 0
+                    total_15 = 0
+                    
+                    for idx in df.index:
+                        val_13 = str(df.iloc[idx, 13])
+                        val_15 = str(df.iloc[idx, 15])
+                        
+                        if val_13.isdigit():
+                            total_13 += int(val_13)
+                        if val_15.isdigit():
+                            total_15 += int(val_15)
+                    
+                    st.success(f"📊 Totales calculados: Columna 13 = {total_13}, Columna 15 = {total_15}")
+                    
+                except:
+                    pass
+            
+        except Exception as e:
+            st.warning(f"Error en validación: {e}")
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza y estandarización avanzada"""
