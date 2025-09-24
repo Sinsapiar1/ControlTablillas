@@ -756,6 +756,88 @@ class TablillasExtractorPro:
                 return True
         return False
     
+    def _filter_valid_fl_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Filtrar filas FL válidas con criterios estrictos para evitar datos incompletos"""
+        try:
+            if df.empty:
+                return df
+            
+            valid_rows = []
+            
+            for idx in df.index:
+                first_col = str(df.iloc[idx, 0]).strip()
+                
+                # Verificar si la fila empieza con FL
+                if not first_col.startswith('FL'):
+                    continue
+                
+                # NUEVO: Validar que la fila tenga datos suficientes
+                if self._is_valid_fl_row(df.iloc[idx]):
+                    valid_rows.append(idx)
+                else:
+                    st.write(f"⚠️ Fila FL incompleta descartada: {first_col}")
+            
+            if valid_rows:
+                return df.loc[valid_rows].reset_index(drop=True)
+            else:
+                return pd.DataFrame()
+                
+        except Exception as e:
+            st.warning(f"⚠️ Error filtrando filas FL: {str(e)}")
+            # Fallback: usar método original
+            return df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)]
+    
+    def _is_valid_fl_row(self, row) -> bool:
+        """Validar si una fila FL tiene datos suficientes y válidos"""
+        try:
+            first_col = str(row.iloc[0]).strip()
+            
+            # Verificar que empiece con FL
+            if not first_col.startswith('FL'):
+                return False
+            
+            # Verificar que tenemos al menos 4 columnas con datos para una fila válida
+            non_empty_cols = 0
+            for i in range(min(10, len(row))):  # Revisar primeras 10 columnas
+                if pd.notna(row.iloc[i]) and str(row.iloc[i]).strip() != '' and str(row.iloc[i]).strip() != 'nan':
+                    non_empty_cols += 1
+            
+            # Necesitamos al menos 4 columnas con datos para una fila válida
+            if non_empty_cols < 4:
+                return False
+            
+            # Verificar que la segunda columna no esté vacía (debería ser WH_Code)
+            if len(row) > 1:
+                second_col = str(row.iloc[1]).strip()
+                if not second_col or second_col == '' or second_col == 'nan':
+                    return False
+            
+            # Verificar que la tercera columna no esté vacía (debería ser Return_Packing_Slip)
+            if len(row) > 2:
+                third_col = str(row.iloc[2]).strip()
+                if not third_col or third_col == '' or third_col == 'nan':
+                    return False
+            
+            # Verificar que la cuarta columna no esté vacía (debería ser Return_Date)
+            if len(row) > 3:
+                fourth_col = str(row.iloc[3]).strip()
+                if not fourth_col or fourth_col == '' or fourth_col == 'nan':
+                    return False
+            
+            # Verificar que no sea solo "FL" con muy pocos datos
+            if first_col == 'FL' and non_empty_cols < 5:
+                return False
+            
+            # Verificar que no sea un patrón como "FL052" sin datos reales
+            if first_col in ['FL052', 'FL051', 'FL050'] and non_empty_cols < 6:
+                return False
+            
+            return True
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error validando fila FL: {str(e)}")
+            return False
+    
     def _validate_and_improve_extraction(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validar y mejorar la calidad de la extracción"""
         try:
@@ -859,11 +941,11 @@ class TablillasExtractorPro:
             
             df = table.df
             
-            # Filtrar solo filas que empiecen con FL (datos de Alsina Forms)
-            fl_rows = df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)]
+            # NUEVO: Filtrar y validar filas FL con criterios más estrictos
+            fl_rows = self._filter_valid_fl_rows(df)
             
             if len(fl_rows) > 0:
-                st.write(f"✅ {len(fl_rows)} filas FL encontradas en tabla {i+1}")
+                st.write(f"✅ {len(fl_rows)} filas FL válidas encontradas en tabla {i+1}")
                 all_data.append(fl_rows)
         
         if not all_data:
@@ -915,6 +997,20 @@ class TablillasExtractorPro:
                             fixed_df.iloc[idx, 2] = return_slip
                         
                         corrections_made += 1
+                        continue
+                
+                # NUEVO: Patrón para filas incompletas como "FL052" sin más datos
+                if first_col == 'FL' or (first_col.startswith('FL') and len(first_col) <= 6):
+                    # Verificar si las columnas siguientes están vacías
+                    has_data = False
+                    for col_idx in range(1, min(5, len(fixed_df.columns))):
+                        if pd.notna(fixed_df.iloc[idx, col_idx]) and str(fixed_df.iloc[idx, col_idx]).strip() != '':
+                            has_data = True
+                            break
+                    
+                    if not has_data:
+                        # Esta fila está incompleta, marcarla para descarte posterior
+                        st.write(f"⚠️ Fila incompleta detectada: {first_col} - será descartada")
                         continue
                 
                 # Patrón original: "FL 612D 729000018764" o similar
@@ -1024,10 +1120,48 @@ class TablillasExtractorPro:
             else:
                 st.info("✅ No se encontraron columnas concatenadas para corregir")
             
+            # NUEVO: Limpiar filas incompletas después de las correcciones
+            fixed_df = self._remove_incomplete_rows(fixed_df)
+            
             return fixed_df
             
         except Exception as e:
             st.warning(f"⚠️ Error corrigiendo columnas: {str(e)}")
+            return df
+    
+    def _remove_incomplete_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remover filas incompletas o mal estructuradas"""
+        try:
+            if df.empty:
+                return df
+            
+            st.info("🧹 Limpiando filas incompletas...")
+            
+            valid_rows = []
+            removed_count = 0
+            
+            for idx in df.index:
+                row = df.iloc[idx]
+                
+                # Verificar si la fila es válida
+                if self._is_valid_fl_row(row):
+                    valid_rows.append(idx)
+                else:
+                    removed_count += 1
+                    first_col = str(row.iloc[0]).strip()
+                    st.write(f"🗑️ Fila incompleta removida: {first_col}")
+            
+            if removed_count > 0:
+                st.success(f"✅ {removed_count} filas incompletas removidas")
+            
+            if valid_rows:
+                return df.loc[valid_rows].reset_index(drop=True)
+            else:
+                st.warning("⚠️ No quedaron filas válidas después de la limpieza")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            st.warning(f"⚠️ Error limpiando filas: {str(e)}")
             return df
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
