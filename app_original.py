@@ -796,16 +796,18 @@ class TablillasExtractorPro:
             if not first_col.startswith('FL'):
                 return False
             
-            # Verificar que tenemos al menos 4 columnas con datos para una fila válida
+            # Verificar que tenemos suficientes columnas con datos para una fila válida
             non_empty_cols = 0
             for i in range(min(10, len(row))):  # Revisar primeras 10 columnas
                 if pd.notna(row.iloc[i]) and str(row.iloc[i]).strip() != '' and str(row.iloc[i]).strip() != 'nan':
                     non_empty_cols += 1
             
-            # Necesitamos al menos 4 columnas con datos para una fila válida
-            if non_empty_cols < 4:
+            # NUEVO: Criterio más flexible - mínimo 3 columnas con datos
+            # Esto permite que páginas con menos columnas (como página 4) sean válidas
+            if non_empty_cols < 3:
                 return False
             
+            # NUEVO: Validación más flexible para páginas con menos columnas
             # Verificar que la segunda columna no esté vacía (debería ser WH_Code)
             if len(row) > 1:
                 second_col = str(row.iloc[1]).strip()
@@ -818,18 +820,22 @@ class TablillasExtractorPro:
                 if not third_col or third_col == '' or third_col == 'nan':
                     return False
             
-            # Verificar que la cuarta columna no esté vacía (debería ser Return_Date)
+            # NUEVO: Solo verificar Return_Date si hay suficientes columnas
+            # Esto permite que páginas con menos columnas (como página 4) sean válidas
             if len(row) > 3:
                 fourth_col = str(row.iloc[3]).strip()
-                if not fourth_col or fourth_col == '' or fourth_col == 'nan':
+                # Solo rechazar si la columna existe pero está vacía
+                if fourth_col == '' or fourth_col == 'nan':
                     return False
             
+            # NUEVO: Validación más flexible para patrones FL
             # Verificar que no sea solo "FL" con muy pocos datos
-            if first_col == 'FL' and non_empty_cols < 5:
+            if first_col == 'FL' and non_empty_cols < 3:  # Reducido de 5 a 3
                 return False
             
+            # NUEVO: Validación más flexible para patrones FL052, etc.
             # Verificar que no sea un patrón como "FL052" sin datos reales
-            if first_col in ['FL052', 'FL051', 'FL050'] and non_empty_cols < 6:
+            if first_col in ['FL052', 'FL051', 'FL050'] and non_empty_cols < 4:  # Reducido de 6 a 4
                 return False
             
             # NUEVO: Detectar patrones problemáticos con saltos de línea
@@ -1143,6 +1149,9 @@ class TablillasExtractorPro:
             # NUEVO: Corregir patrones específicos problemáticos
             fixed_df = self._fix_specific_problematic_patterns(fixed_df)
             
+            # NUEVO: Expandir columnas para páginas con menos columnas
+            fixed_df = self._expand_columns_for_short_pages(fixed_df)
+            
             return fixed_df
             
         except Exception as e:
@@ -1326,6 +1335,79 @@ class TablillasExtractorPro:
             
         except Exception as e:
             st.warning(f"⚠️ Error corrigiendo patrones específicos: {str(e)}")
+            return df
+    
+    def _expand_columns_for_short_pages(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Expandir columnas para páginas que tienen menos columnas (como página 4)"""
+        try:
+            st.info("📊 Expandindo columnas para páginas con menos columnas...")
+            
+            if df.empty:
+                return df
+            
+            # Si la tabla tiene menos de 15 columnas, intentar expandir
+            if len(df.columns) < 15:
+                st.info(f"📋 Tabla detectada con {len(df.columns)} columnas - expandiendo...")
+                
+                expanded_df = df.copy()
+                corrections_made = 0
+                
+                for idx in expanded_df.index:
+                    # Buscar patrones de datos concatenados en las primeras columnas
+                    for col_idx in range(min(5, len(expanded_df.columns))):
+                        cell_value = str(expanded_df.iloc[idx, col_idx]).strip()
+                        
+                        # Patrón: datos separados por comas o espacios múltiples
+                        if ',' in cell_value and len(cell_value.split(',')) > 1:
+                            parts = [part.strip() for part in cell_value.split(',')]
+                            
+                            # Si encontramos datos separados por comas, expandir
+                            if len(parts) >= 2:
+                                # Reemplazar el valor original con la primera parte
+                                expanded_df.iloc[idx, col_idx] = parts[0]
+                                
+                                # Agregar las partes restantes en columnas siguientes
+                                for i, part in enumerate(parts[1:], 1):
+                                    if col_idx + i < len(expanded_df.columns):
+                                        expanded_df.iloc[idx, col_idx + i] = part
+                                        corrections_made += 1
+                                
+                                continue
+                        
+                        # Patrón: datos con espacios múltiples (como "226, 1499")
+                        if ' ' in cell_value and len(cell_value.split()) > 1:
+                            parts = cell_value.split()
+                            
+                            # Verificar si parece ser datos numéricos separados
+                            numeric_parts = []
+                            for part in parts:
+                                # Limpiar comas y verificar si es numérico
+                                clean_part = part.replace(',', '').strip()
+                                if clean_part.isdigit() or (clean_part.endswith('M') and clean_part[:-1].isdigit()):
+                                    numeric_parts.append(clean_part)
+                            
+                            if len(numeric_parts) >= 2:
+                                # Reemplazar con la primera parte
+                                expanded_df.iloc[idx, col_idx] = numeric_parts[0]
+                                
+                                # Agregar las partes restantes
+                                for i, part in enumerate(numeric_parts[1:], 1):
+                                    if col_idx + i < len(expanded_df.columns):
+                                        expanded_df.iloc[idx, col_idx + i] = part
+                                        corrections_made += 1
+                
+                if corrections_made > 0:
+                    st.success(f"✅ {corrections_made} columnas expandidas para páginas cortas")
+                else:
+                    st.info("✅ No se encontraron patrones para expandir")
+                
+                return expanded_df
+            else:
+                st.info("✅ Tabla ya tiene suficientes columnas")
+                return df
+                
+        except Exception as e:
+            st.warning(f"⚠️ Error expandiendo columnas: {str(e)}")
             return df
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
