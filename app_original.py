@@ -832,6 +832,17 @@ class TablillasExtractorPro:
             if first_col in ['FL052', 'FL051', 'FL050'] and non_empty_cols < 6:
                 return False
             
+            # NUEVO: Detectar patrones problemáticos con saltos de línea
+            if '\n' in first_col or '\r' in first_col:
+                return False
+            
+            # NUEVO: Detectar patrones con comillas dobles (datos mal formateados)
+            if first_col.startswith('"') and first_col.endswith('"'):
+                # Verificar si el contenido dentro de las comillas es válido
+                inner_content = first_col[1:-1].strip()
+                if '\n' in inner_content or len(inner_content.split()) > 3:
+                    return False
+            
             return True
             
         except Exception as e:
@@ -1123,6 +1134,15 @@ class TablillasExtractorPro:
             # NUEVO: Limpiar filas incompletas después de las correcciones
             fixed_df = self._remove_incomplete_rows(fixed_df)
             
+            # NUEVO: Limpiar datos con saltos de línea y caracteres especiales
+            fixed_df = self._clean_special_characters(fixed_df)
+            
+            # NUEVO: Eliminar filas duplicadas
+            fixed_df = self._remove_duplicate_rows(fixed_df)
+            
+            # NUEVO: Corregir patrones específicos problemáticos
+            fixed_df = self._fix_specific_problematic_patterns(fixed_df)
+            
             return fixed_df
             
         except Exception as e:
@@ -1162,6 +1182,150 @@ class TablillasExtractorPro:
                 
         except Exception as e:
             st.warning(f"⚠️ Error limpiando filas: {str(e)}")
+            return df
+    
+    def _clean_special_characters(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Limpiar caracteres especiales, saltos de línea y datos mal formateados"""
+        try:
+            st.info("🧹 Limpiando caracteres especiales y saltos de línea...")
+            
+            cleaned_df = df.copy()
+            corrections_made = 0
+            
+            for idx in cleaned_df.index:
+                for col_idx in range(len(cleaned_df.columns)):
+                    cell_value = str(cleaned_df.iloc[idx, col_idx]).strip()
+                    
+                    # Limpiar saltos de línea y caracteres especiales
+                    if '\n' in cell_value or '\r' in cell_value:
+                        # Reemplazar saltos de línea con espacios
+                        cleaned_value = cell_value.replace('\n', ' ').replace('\r', ' ')
+                        # Limpiar espacios múltiples
+                        cleaned_value = ' '.join(cleaned_value.split())
+                        cleaned_df.iloc[idx, col_idx] = cleaned_value
+                        corrections_made += 1
+                    
+                    # Limpiar comillas dobles al inicio y final
+                    if cell_value.startswith('"') and cell_value.endswith('"'):
+                        cleaned_value = cell_value[1:-1].strip()
+                        cleaned_df.iloc[idx, col_idx] = cleaned_value
+                        corrections_made += 1
+                    
+                    # Limpiar valores que contienen solo espacios o caracteres especiales
+                    if cell_value in ['', ' ', 'nan', 'None', 'null']:
+                        cleaned_df.iloc[idx, col_idx] = ''
+                        corrections_made += 1
+            
+            if corrections_made > 0:
+                st.success(f"✅ {corrections_made} celdas limpiadas de caracteres especiales")
+            
+            return cleaned_df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error limpiando caracteres especiales: {str(e)}")
+            return df
+    
+    def _remove_duplicate_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Eliminar filas duplicadas basándose en Return_Packing_Slip"""
+        try:
+            st.info("🔍 Detectando y eliminando filas duplicadas...")
+            
+            if df.empty:
+                return df
+            
+            # Crear una columna temporal para identificar duplicados
+            # Usar Return_Packing_Slip como identificador único
+            if len(df.columns) > 2:
+                # Usar la tercera columna como Return_Packing_Slip
+                df['_temp_id'] = df.iloc[:, 2].astype(str)
+                
+                # Contar duplicados antes de eliminar
+                duplicates_before = len(df)
+                df_unique = df.drop_duplicates(subset=['_temp_id'], keep='first')
+                duplicates_removed = duplicates_before - len(df_unique)
+                
+                # Eliminar columna temporal
+                df_unique = df_unique.drop('_temp_id', axis=1)
+                
+                if duplicates_removed > 0:
+                    st.success(f"✅ {duplicates_removed} filas duplicadas eliminadas")
+                else:
+                    st.info("✅ No se encontraron filas duplicadas")
+                
+                return df_unique
+            else:
+                st.warning("⚠️ No hay suficientes columnas para detectar duplicados")
+                return df
+                
+        except Exception as e:
+            st.warning(f"⚠️ Error eliminando duplicados: {str(e)}")
+            return df
+    
+    def _fix_specific_problematic_patterns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Corregir patrones específicos problemáticos encontrados en los datos"""
+        try:
+            st.info("🔧 Corrigiendo patrones específicos problemáticos...")
+            
+            fixed_df = df.copy()
+            corrections_made = 0
+            
+            for idx in fixed_df.index:
+                first_col = str(fixed_df.iloc[idx, 0]).strip()
+                
+                # Patrón problemático: "FL\n61D\n729000018785\n9/23/2025"
+                if first_col.startswith('"FL') and '\n' in first_col:
+                    # Extraer componentes del patrón problemático
+                    import re
+                    
+                    # Limpiar comillas y saltos de línea
+                    clean_content = first_col.replace('"', '').replace('\n', ' ').strip()
+                    parts = clean_content.split()
+                    
+                    if len(parts) >= 4:
+                        # Reorganizar: FL, WH_Code, Return_Packing_Slip, Return_Date
+                        fixed_df.iloc[idx, 0] = parts[0]  # "FL"
+                        
+                        if len(fixed_df.columns) > 1:
+                            fixed_df.iloc[idx, 1] = parts[1]  # WH_Code
+                        
+                        if len(fixed_df.columns) > 2:
+                            fixed_df.iloc[idx, 2] = parts[2]  # Return_Packing_Slip
+                        
+                        if len(fixed_df.columns) > 3:
+                            # Convertir fecha al formato correcto
+                            date_str = parts[3]
+                            try:
+                                from datetime import datetime
+                                if '/' in date_str:
+                                    date_obj = datetime.strptime(date_str, '%m/%d/%Y')
+                                    fixed_df.iloc[idx, 3] = date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                    fixed_df.iloc[idx, 3] = date_str
+                            except:
+                                fixed_df.iloc[idx, 3] = date_str
+                        
+                        corrections_made += 1
+                        continue
+                
+                # Patrón problemático: datos con saltos de línea en Customer_Name
+                for col_idx in range(5, min(10, len(fixed_df.columns))):  # Revisar columnas de texto
+                    cell_value = str(fixed_df.iloc[idx, col_idx]).strip()
+                    
+                    if '\n' in cell_value and len(cell_value.split('\n')) > 2:
+                        # Limpiar saltos de línea y tomar solo la primera línea
+                        first_line = cell_value.split('\n')[0].strip()
+                        fixed_df.iloc[idx, col_idx] = first_line
+                        corrections_made += 1
+            
+            if corrections_made > 0:
+                st.success(f"✅ {corrections_made} patrones problemáticos corregidos")
+            else:
+                st.info("✅ No se encontraron patrones problemáticos específicos")
+            
+            return fixed_df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error corrigiendo patrones específicos: {str(e)}")
             return df
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
