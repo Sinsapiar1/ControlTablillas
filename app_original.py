@@ -956,6 +956,8 @@ class TablillasExtractorPro:
         for i, table in enumerate(tables):
             st.write(f"🔍 Procesando tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
             
+            df = table.df
+            
             # NUEVO: Análisis detallado de la estructura de columnas
             if i == 0:  # Solo mostrar para la primera tabla
                 st.info("📋 **Análisis de estructura de columnas:**")
@@ -977,8 +979,6 @@ class TablillasExtractorPro:
             elif i == 7:  # Página 8
                 st.write(f"- **Página 8**: {table.shape[1]} columnas")
                 self._analyze_column_differences(df, i+1)
-            
-            df = table.df
             
             # NUEVO: Filtrar y validar filas FL con criterios más estrictos
             fl_rows = self._filter_valid_fl_rows(df)
