@@ -467,7 +467,7 @@ class TablillasExtractorPro:
         self.analyzer = ExcelAnalyzer()
     
     def extract_from_pdf(self, uploaded_file) -> Optional[pd.DataFrame]:
-        """Extrae datos usando configuraciones múltiples de Camelot"""
+        """Extrae datos usando configuraciones múltiples de Camelot con manejo inteligente de páginas"""
         if not CAMELOT_AVAILABLE:
             st.error("⚠️ Camelot no está instalado. Ejecuta: pip install camelot-py[cv]")
             return None
@@ -478,70 +478,377 @@ class TablillasExtractorPro:
                 tmp_file.write(uploaded_file.read())
                 tmp_file_path = tmp_file.name
             
-            st.info("🔄 Extrayendo datos con múltiples métodos Camelot...")
+            st.info("🔄 Extrayendo datos con métodos Camelot mejorados...")
             
-            tables = None
-            method_used = ""
+            # NUEVO: Extracción inteligente por páginas
+            all_tables = []
+            successful_methods = []
             
-            # MÉTODO 1: Stream con configuraciones optimizadas
-            try:
-                tables = camelot.read_pdf(
-                    tmp_file_path, 
-                    pages='all', 
-                    flavor='stream',
-                    edge_tol=500,           # Tolerancia para detectar bordes
-                    row_tol=10,             # Tolerancia para separar filas
-                    column_tol=0,           # Tolerancia estricta para columnas
-                    split_text=True,        # Dividir texto en celdas
-                    flag_size=True          # Marcar tamaños de fuente
-                )
-                if len(tables) > 0:
-                    method_used = "Stream Optimizado"
-                    st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
-            except Exception as e:
-                st.write(f"Stream Optimizado falló: {str(e)}")
+            # Primero, intentar extraer todas las páginas con métodos optimizados
+            all_tables, successful_methods = self._extract_with_multiple_methods(tmp_file_path)
             
-            # MÉTODO 2: Stream básico (fallback)
-            if not tables or len(tables) == 0:
-                try:
-                    tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
-                    if len(tables) > 0:
-                        method_used = "Stream Básico"
-                        st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
-                except Exception as e:
-                    st.write(f"Stream Básico falló: {str(e)}")
-            
-            # MÉTODO 3: Lattice con configuraciones
-            if not tables or len(tables) == 0:
-                try:
-                    tables = camelot.read_pdf(
-                        tmp_file_path, 
-                        pages='all', 
-                        flavor='lattice',
-                        process_background=True,   # Procesar fondo
-                        line_scale=15             # Escala de líneas
-                    )
-                    if len(tables) > 0:
-                        method_used = "Lattice Optimizado"
-                        st.write(f"✅ {method_used}: {len(tables)} tablas encontradas")
-                except Exception as e:
-                    st.write(f"Lattice Optimizado falló: {str(e)}")
+            # Si no se encontraron tablas, intentar extracción página por página
+            if not all_tables:
+                st.warning("⚠️ Métodos globales fallaron. Intentando extracción página por página...")
+                all_tables, successful_methods = self._extract_page_by_page(tmp_file_path)
             
             # Limpiar archivo temporal
             os.unlink(tmp_file_path)
             
-            if not tables or len(tables) == 0:
+            if not all_tables:
                 st.error("❌ No se encontraron tablas en el PDF con ningún método")
                 return None
             
-            st.info(f"🎯 Método exitoso: {method_used}")
+            st.success(f"🎯 Extracción exitosa: {len(all_tables)} tablas encontradas con métodos: {', '.join(successful_methods)}")
             
-            # Procesar tablas encontradas
-            return self._process_tables_advanced(tables)
+            # Procesar tablas encontradas con manejo mejorado
+            return self._process_tables_advanced(all_tables)
             
         except Exception as e:
             st.error(f"❌ Error procesando PDF: {str(e)}")
             return None
+    
+    def _extract_with_multiple_methods(self, tmp_file_path: str) -> Tuple[List, List[str]]:
+        """Extraer con múltiples métodos Camelot optimizados"""
+        all_tables = []
+        successful_methods = []
+        
+        # MÉTODO 1: Stream con configuraciones optimizadas para páginas múltiples
+        try:
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='stream',
+                edge_tol=500,           # Tolerancia para detectar bordes
+                row_tol=10,             # Tolerancia para separar filas
+                column_tol=0,           # Tolerancia estricta para columnas
+                split_text=True,        # Dividir texto en celdas
+                flag_size=True          # Marcar tamaños de fuente
+            )
+            if len(tables) > 0:
+                all_tables.extend(tables)
+                successful_methods.append("Stream Optimizado")
+                st.write(f"✅ Stream Optimizado: {len(tables)} tablas encontradas")
+        except Exception as e:
+            st.write(f"Stream Optimizado falló: {str(e)}")
+        
+        # MÉTODO 2: Stream con configuraciones específicas para páginas problemáticas
+        try:
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='stream',
+                edge_tol=300,           # Tolerancia más estricta
+                row_tol=5,              # Tolerancia más estricta para filas
+                column_tol=5,           # Tolerancia para columnas
+                split_text=True,
+                flag_size=True,
+                table_areas=['0,1000,1000,0']  # Área específica de tabla
+            )
+            if len(tables) > 0:
+                # Solo agregar si no duplicamos tablas
+                new_tables = [t for t in tables if not self._is_duplicate_table(t, all_tables)]
+                all_tables.extend(new_tables)
+                if new_tables:
+                    successful_methods.append("Stream Específico")
+                    st.write(f"✅ Stream Específico: {len(new_tables)} tablas adicionales encontradas")
+        except Exception as e:
+            st.write(f"Stream Específico falló: {str(e)}")
+        
+        # MÉTODO 3: Stream básico (fallback)
+        if not all_tables:
+            try:
+                tables = camelot.read_pdf(tmp_file_path, pages='all', flavor='stream')
+                if len(tables) > 0:
+                    all_tables.extend(tables)
+                    successful_methods.append("Stream Básico")
+                    st.write(f"✅ Stream Básico: {len(tables)} tablas encontradas")
+            except Exception as e:
+                st.write(f"Stream Básico falló: {str(e)}")
+        
+        # MÉTODO 4: Lattice con configuraciones optimizadas
+        if not all_tables:
+            try:
+                tables = camelot.read_pdf(
+                    tmp_file_path, 
+                    pages='all', 
+                    flavor='lattice',
+                    process_background=True,   # Procesar fondo
+                    line_scale=15             # Escala de líneas
+                )
+                if len(tables) > 0:
+                    all_tables.extend(tables)
+                    successful_methods.append("Lattice Optimizado")
+                    st.write(f"✅ Lattice Optimizado: {len(tables)} tablas encontradas")
+            except Exception as e:
+                st.write(f"Lattice Optimizado falló: {str(e)}")
+        
+        return all_tables, successful_methods
+    
+    def _get_page_specific_config(self, page_num: int) -> Dict:
+        """Obtener configuración específica para cada página"""
+        configs = {
+            1: {
+                'edge_tol': 500,
+                'row_tol': 10,
+                'column_tol': 0,
+                'description': 'Página 1 - Configuración estándar'
+            },
+            2: {
+                'edge_tol': 400,
+                'row_tol': 8,
+                'column_tol': 5,
+                'description': 'Página 2 - Configuración intermedia'
+            },
+            3: {
+                'edge_tol': 350,
+                'row_tol': 6,
+                'column_tol': 8,
+                'description': 'Página 3 - Configuración estricta'
+            },
+            4: {
+                'edge_tol': 200,
+                'row_tol': 3,
+                'column_tol': 10,
+                'description': 'Página 4 - Configuración muy estricta para columnas concatenadas'
+            },
+            5: {
+                'edge_tol': 250,
+                'row_tol': 4,
+                'column_tol': 12,
+                'description': 'Página 5 - Configuración para futuras páginas'
+            }
+        }
+        
+        # Para páginas 6+, usar configuración similar a página 4
+        if page_num > 5:
+            return {
+                'edge_tol': 200,
+                'row_tol': 3,
+                'column_tol': 10,
+                'description': f'Página {page_num} - Configuración adaptativa'
+            }
+        
+        return configs.get(page_num, configs[4])  # Default a página 4
+    
+    def _extract_page_by_page(self, tmp_file_path: str) -> Tuple[List, List[str]]:
+        """Extraer página por página con métodos específicos para cada página"""
+        all_tables = []
+        successful_methods = []
+        
+        # Primero, detectar cuántas páginas tiene el PDF
+        try:
+            # Intentar extraer la primera página para detectar el número total
+            test_tables = camelot.read_pdf(tmp_file_path, pages='1', flavor='stream')
+            if test_tables:
+                # Si funciona, intentar detectar el número total de páginas
+                max_pages = 10  # Asumir máximo 10 páginas inicialmente
+                st.info(f"🔍 Intentando extracción página por página (máximo {max_pages} páginas)...")
+                
+                for page_num in range(1, max_pages + 1):
+                    page_tables = self._extract_single_page(tmp_file_path, page_num)
+                    if page_tables:
+                        all_tables.extend(page_tables)
+                        successful_methods.append(f"Página {page_num}")
+                        st.write(f"✅ Página {page_num}: {len(page_tables)} tablas encontradas")
+                    else:
+                        # Si no encontramos tablas en esta página, probablemente no hay más páginas
+                        if page_num > 3:  # Solo después de la página 3
+                            break
+        except Exception as e:
+            st.write(f"Error en extracción página por página: {str(e)}")
+        
+        return all_tables, successful_methods
+    
+    def _extract_single_page(self, tmp_file_path: str, page_num: int) -> List:
+        """Extraer una página específica con configuraciones optimizadas por página"""
+        page_tables = []
+        
+        # Obtener configuración específica para esta página
+        config = self._get_page_specific_config(page_num)
+        st.write(f"🔧 {config['description']}")
+        
+        # Método 1: Stream con configuración específica de la página
+        try:
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages=str(page_num), 
+                flavor='stream',
+                edge_tol=config['edge_tol'],
+                row_tol=config['row_tol'],
+                column_tol=config['column_tol'],
+                split_text=True,
+                flag_size=True
+            )
+            if len(tables) > 0:
+                page_tables.extend(tables)
+                st.write(f"✅ Página {page_num} - Stream específico exitoso: {len(tables)} tablas")
+        except Exception as e:
+            st.write(f"Página {page_num} - Stream específico falló: {str(e)}")
+        
+        # Método 2: Stream con configuraciones más permisivas (fallback)
+        if not page_tables:
+            try:
+                tables = camelot.read_pdf(
+                    tmp_file_path, 
+                    pages=str(page_num), 
+                    flavor='stream',
+                    edge_tol=800,           # Tolerancia más permisiva
+                    row_tol=20,             # Tolerancia más permisiva para filas
+                    column_tol=0,           # Sin tolerancia para columnas
+                    split_text=True,
+                    flag_size=True
+                )
+                if len(tables) > 0:
+                    page_tables.extend(tables)
+                    st.write(f"✅ Página {page_num} - Stream permisivo exitoso: {len(tables)} tablas")
+            except Exception as e:
+                st.write(f"Página {page_num} - Stream permisivo falló: {str(e)}")
+        
+        # Método 3: Lattice para páginas con líneas definidas
+        if not page_tables:
+            try:
+                tables = camelot.read_pdf(
+                    tmp_file_path, 
+                    pages=str(page_num), 
+                    flavor='lattice',
+                    process_background=True,
+                    line_scale=20,          # Escala más alta para líneas más visibles
+                    copy_text=['v']         # Copiar texto vertical
+                )
+                if len(tables) > 0:
+                    page_tables.extend(tables)
+                    st.write(f"✅ Página {page_num} - Lattice exitoso: {len(tables)} tablas")
+            except Exception as e:
+                st.write(f"Página {page_num} - Lattice falló: {str(e)}")
+        
+        # Método 4: Stream con configuración ultra-estricta para páginas problemáticas (especialmente página 4+)
+        if not page_tables and page_num >= 4:
+            try:
+                tables = camelot.read_pdf(
+                    tmp_file_path, 
+                    pages=str(page_num), 
+                    flavor='stream',
+                    edge_tol=100,           # Tolerancia ultra-estricta
+                    row_tol=1,              # Tolerancia ultra-estricta para filas
+                    column_tol=15,          # Tolerancia alta para columnas
+                    split_text=True,
+                    flag_size=True,
+                    table_areas=['0,1000,1000,0']  # Área específica
+                )
+                if len(tables) > 0:
+                    page_tables.extend(tables)
+                    st.write(f"✅ Página {page_num} - Stream ultra-estricto exitoso: {len(tables)} tablas")
+            except Exception as e:
+                st.write(f"Página {page_num} - Stream ultra-estricto falló: {str(e)}")
+        
+        return page_tables
+    
+    def _is_duplicate_table(self, new_table, existing_tables: List) -> bool:
+        """Verificar si una tabla es duplicada"""
+        if not existing_tables:
+            return False
+        
+        # Comparar dimensiones y contenido básico
+        for existing_table in existing_tables:
+            if (new_table.shape == existing_table.shape and 
+                new_table.df.equals(existing_table.df)):
+                return True
+        return False
+    
+    def _validate_and_improve_extraction(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Validar y mejorar la calidad de la extracción"""
+        try:
+            st.info("🔍 Validando calidad de extracción...")
+            
+            # Contar filas FL válidas
+            fl_rows = df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)]
+            total_rows = len(df)
+            fl_count = len(fl_rows)
+            
+            st.write(f"📊 Estadísticas de extracción:")
+            st.write(f"   - Total de filas: {total_rows}")
+            st.write(f"   - Filas FL válidas: {fl_count}")
+            st.write(f"   - Tasa de éxito: {(fl_count/total_rows*100):.1f}%" if total_rows > 0 else "   - Tasa de éxito: 0%")
+            
+            # Si la tasa de éxito es muy baja, intentar correcciones adicionales
+            if fl_count < total_rows * 0.5:  # Menos del 50% de filas válidas
+                st.warning("⚠️ Tasa de éxito baja. Aplicando correcciones adicionales...")
+                df = self._apply_additional_corrections(df)
+            
+            # Validar estructura de columnas
+            expected_min_cols = 10
+            if len(df.columns) < expected_min_cols:
+                st.warning(f"⚠️ Pocas columnas detectadas ({len(df.columns)}). Esperado: {expected_min_cols}+")
+                # Intentar expandir columnas si es necesario
+                df = self._expand_columns_if_needed(df)
+            
+            return df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error en validación: {str(e)}")
+            return df
+    
+    def _apply_additional_corrections(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Aplicar correcciones adicionales para mejorar la extracción"""
+        try:
+            st.info("🔧 Aplicando correcciones adicionales...")
+            
+            corrections_made = 0
+            
+            # Buscar patrones que podrían ser FL pero no fueron detectados
+            for idx in df.index:
+                first_col = str(df.iloc[idx, 0]).strip()
+                
+                # Patrón: números largos que podrían ser Return_Packing_Slip
+                if first_col.isdigit() and len(first_col) >= 9:
+                    # Verificar si hay un WH_Code en la columna siguiente
+                    if len(df.columns) > 1:
+                        second_col = str(df.iloc[idx, 1]).strip()
+                        if len(second_col) <= 4 and not second_col.isdigit():
+                            # Reorganizar: FL, WH_Code, Return_Packing_Slip
+                            df.iloc[idx, 0] = "FL"
+                            df.iloc[idx, 1] = second_col
+                            df.iloc[idx, 2] = first_col
+                            corrections_made += 1
+            
+            if corrections_made > 0:
+                st.success(f"✅ {corrections_made} correcciones adicionales aplicadas")
+            
+            return df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error en correcciones adicionales: {str(e)}")
+            return df
+    
+    def _expand_columns_if_needed(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Expandir columnas si se detectan pocas columnas"""
+        try:
+            # Si tenemos muy pocas columnas, podría ser que los datos estén concatenados
+            if len(df.columns) < 8:
+                st.info("🔧 Detectadas pocas columnas. Verificando si hay datos concatenados...")
+                
+                # Buscar filas con datos muy largos en la primera columna
+                for idx in df.index:
+                    first_col = str(df.iloc[idx, 0]).strip()
+                    if len(first_col) > 20:  # Datos muy largos
+                        # Intentar separar por espacios
+                        parts = first_col.split()
+                        if len(parts) >= 3:
+                            # Expandir a más columnas
+                            for i, part in enumerate(parts[:min(8, len(parts))]):
+                                if i < len(df.columns):
+                                    df.iloc[idx, i] = part
+                                else:
+                                    # Agregar nueva columna si es necesario
+                                    df[f'Col_{i+1}'] = ''
+                                    df.iloc[idx, i] = part
+            
+            return df
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error expandiendo columnas: {str(e)}")
+            return df
     
     def _process_tables_advanced(self, tables) -> pd.DataFrame:
         """Procesamiento avanzado de tablas extraídas"""
@@ -566,11 +873,14 @@ class TablillasExtractorPro:
         # Combinar todas las tablas FL
         combined_df = pd.concat(all_data, ignore_index=True)
         
+        # NUEVO: Validar y mejorar la extracción antes de limpiar
+        combined_df = self._validate_and_improve_extraction(combined_df)
+        
         # Limpiar y estandarizar
         return self._clean_and_standardize_advanced(combined_df)
     
     def _fix_concatenated_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Corregir columnas concatenadas - Solución para el problema específico"""
+        """Corregir columnas concatenadas - Solución mejorada para páginas problemáticas"""
         try:
             st.info("🔧 Corrigiendo columnas mal separadas...")
             
@@ -582,7 +892,32 @@ class TablillasExtractorPro:
             for idx in fixed_df.index:
                 first_col = str(fixed_df.iloc[idx, 0]).strip()
                 
-                # Patrón: "FL 612D 729000018764" o similar
+                # NUEVO: Patrón específico para 4ta página - "FL61D729040036567"
+                if first_col.startswith('FL') and len(first_col) > 10 and not ' ' in first_col:
+                    # Extraer componentes usando regex
+                    import re
+                    
+                    # Patrón: FL + WH_Code (2-4 caracteres) + Return_Packing_Slip (9+ dígitos)
+                    pattern = r'^FL([A-Za-z0-9]{2,4})(\d{9,})$'
+                    match = re.match(pattern, first_col)
+                    
+                    if match:
+                        wh_code = match.group(1)
+                        return_slip = match.group(2)
+                        
+                        # Separar correctamente
+                        fixed_df.iloc[idx, 0] = "FL"
+                        
+                        if len(fixed_df.columns) > 1:
+                            fixed_df.iloc[idx, 1] = wh_code
+                        
+                        if len(fixed_df.columns) > 2:
+                            fixed_df.iloc[idx, 2] = return_slip
+                        
+                        corrections_made += 1
+                        continue
+                
+                # Patrón original: "FL 612D 729000018764" o similar
                 if first_col.startswith('FL '):
                     parts = first_col.split()
                     
@@ -618,7 +953,7 @@ class TablillasExtractorPro:
                     # Verificar si parece WH_Code + Return_Packing_Slip
                     if (len(parts[0]) <= 4 and  # WH_Code corto
                         len(parts[1]) >= 10 and parts[1].isdigit()):  # Return_Packing_Slip largo
-                        
+        
                         # Insertar FL al principio y separar
                         fixed_df.iloc[idx, 0] = "FL"
                         
@@ -640,17 +975,52 @@ class TablillasExtractorPro:
                                         fixed_df.iloc[idx, i] = val
                         
                         corrections_made += 1
+                
+                # NUEVO: Patrón para columnas con datos concatenados en otras posiciones
+                for col_idx in range(1, min(5, len(fixed_df.columns))):  # Revisar primeras 5 columnas
+                    cell_value = str(fixed_df.iloc[idx, col_idx]).strip()
+                    
+                    # Detectar patrones como "4992226M 2" o "11671M 1"
+                    if 'M ' in cell_value or 'T ' in cell_value:
+                        parts = cell_value.split()
+                        if len(parts) == 2:
+                            # Separar valor y sufijo
+                            fixed_df.iloc[idx, col_idx] = parts[0]  # "4992226M"
+                            
+                            # Si hay una columna siguiente, poner el número
+                            if col_idx + 1 < len(fixed_df.columns):
+                                current_next = str(fixed_df.iloc[idx, col_idx + 1]).strip()
+                                if pd.isna(fixed_df.iloc[idx, col_idx + 1]) or current_next == '' or current_next == '0':
+                                    fixed_df.iloc[idx, col_idx + 1] = parts[1]  # "2"
+                                    corrections_made += 1
+            
+            # NUEVO: Limpiar columnas con datos mixtos como "1674, 1711"
+            for col_idx in range(len(fixed_df.columns)):
+                for idx in fixed_df.index:
+                    cell_value = str(fixed_df.iloc[idx, col_idx]).strip()
+                    
+                    # Detectar patrones con comas y múltiples números
+                    if ',' in cell_value and any(char.isdigit() for char in cell_value):
+                        # Para columnas con múltiples valores, tomar el primero
+                        first_value = cell_value.split(',')[0].strip()
+                        if first_value and first_value != '0':
+                            fixed_df.iloc[idx, col_idx] = first_value
+                            corrections_made += 1
             
             # Mostrar resultados
             if corrections_made > 0:
-                st.success(f"✅ {corrections_made} filas corregidas")
-                st.write("**Ejemplo de corrección:**")
+                st.success(f"✅ {corrections_made} correcciones aplicadas")
+                st.write("**Ejemplos de corrección:**")
                 
-                # Mostrar ejemplo de la primera fila corregida
-                example_idx = 0
-                if len(df) > example_idx:
-                    st.write(f"**Antes:** {df.iloc[example_idx, 0]}")
-                    st.write(f"**Después:** Col1='{fixed_df.iloc[example_idx, 0]}' | Col2='{fixed_df.iloc[example_idx, 1]}' | Col3='{fixed_df.iloc[example_idx, 2]}'")
+                # Mostrar ejemplos de correcciones
+                examples_shown = 0
+                for idx in range(min(3, len(df))):
+                    if str(df.iloc[idx, 0]) != str(fixed_df.iloc[idx, 0]):
+                        st.write(f"**Fila {idx+1} - Antes:** {df.iloc[idx, 0]}")
+                        st.write(f"**Fila {idx+1} - Después:** Col1='{fixed_df.iloc[idx, 0]}' | Col2='{fixed_df.iloc[idx, 1]}' | Col3='{fixed_df.iloc[idx, 2]}'")
+                        examples_shown += 1
+                        if examples_shown >= 2:
+                            break
             else:
                 st.info("✅ No se encontraron columnas concatenadas para corregir")
             
@@ -685,11 +1055,74 @@ class TablillasExtractorPro:
             df = self._calculate_advanced_metrics(df)
             
             st.success(f"✅ Datos procesados correctamente: {len(df)} registros válidos")
+            
+            # NUEVO: Mostrar resumen de mejoras aplicadas
+            self._show_extraction_summary(df)
+            
             return df
             
         except Exception as e:
             st.error(f"❌ Error limpiando datos: {str(e)}")
             return df
+    
+    def _show_extraction_summary(self, df: pd.DataFrame):
+        """Mostrar resumen de la extracción y mejoras aplicadas"""
+        try:
+            st.markdown("### 📊 Resumen de Extracción Mejorada")
+            
+            # Estadísticas básicas
+            total_rows = len(df)
+            fl_rows = len(df[df.iloc[:, 0].astype(str).str.contains('FL', na=False)])
+            success_rate = (fl_rows / total_rows * 100) if total_rows > 0 else 0
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("📋 Total Filas", total_rows)
+            
+            with col2:
+                st.metric("✅ Filas FL Válidas", fl_rows)
+            
+            with col3:
+                st.metric("📊 Tasa de Éxito", f"{success_rate:.1f}%")
+            
+            with col4:
+                st.metric("📏 Columnas", len(df.columns))
+            
+            # Información sobre mejoras aplicadas
+            st.markdown("""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        padding: 15px; border-radius: 10px; margin: 10px 0; color: white;">
+                <h4 style="margin: 0 0 10px 0; color: white;">🚀 Mejoras Aplicadas</h4>
+                <ul style="margin: 0; padding-left: 20px;">
+                    <li>✅ <strong>Extracción inteligente por páginas</strong> con configuraciones específicas</li>
+                    <li>✅ <strong>Corrección automática</strong> de columnas concatenadas (ej: FL61D729040036567)</li>
+                    <li>✅ <strong>Múltiples métodos Camelot</strong> con fallbacks automáticos</li>
+                    <li>✅ <strong>Validación de calidad</strong> con correcciones adicionales</li>
+                    <li>✅ <strong>Preparado para futuras páginas</strong> (5, 6, 7, etc.)</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Mostrar ejemplos de datos extraídos
+            if not df.empty:
+                st.markdown("### 📋 Muestra de Datos Extraídos")
+                
+                # Mostrar primeras 5 filas con columnas principales
+                display_columns = list(df.columns[:8])  # Primeras 8 columnas
+                sample_df = df[display_columns].head(5)
+                
+                st.dataframe(sample_df, use_container_width=True)
+                
+                # Información sobre columnas detectadas
+                st.info(f"""
+                📊 **Columnas detectadas:** {len(df.columns)} columnas
+                🎯 **Columnas principales:** {', '.join(display_columns[:5])}...
+                💡 **Tip:** Los datos han sido procesados y corregidos automáticamente para manejar las complejidades de la página 4 y futuras páginas.
+                """)
+            
+        except Exception as e:
+            st.warning(f"⚠️ Error mostrando resumen: {str(e)}")
     
     def _clean_data_types_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza avanzada de tipos de datos"""
