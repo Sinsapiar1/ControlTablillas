@@ -956,6 +956,28 @@ class TablillasExtractorPro:
         for i, table in enumerate(tables):
             st.write(f"🔍 Procesando tabla {i+1}: {table.shape[0]} filas, {table.shape[1]} columnas")
             
+            # NUEVO: Análisis detallado de la estructura de columnas
+            if i == 0:  # Solo mostrar para la primera tabla
+                st.info("📋 **Análisis de estructura de columnas:**")
+                st.write(f"- **Página 1**: {table.shape[1]} columnas")
+                # Guardar estructura de referencia
+                self._reference_columns = list(df.columns)
+            elif i == 3:  # Página 4
+                st.write(f"- **Página 4**: {table.shape[1]} columnas ⚠️ (Estructura diferente)")
+                self._analyze_column_differences(df, i+1)
+            elif i == 4:  # Página 5
+                st.write(f"- **Página 5**: {table.shape[1]} columnas")
+                self._analyze_column_differences(df, i+1)
+            elif i == 5:  # Página 6
+                st.write(f"- **Página 6**: {table.shape[1]} columnas")
+                self._analyze_column_differences(df, i+1)
+            elif i == 6:  # Página 7
+                st.write(f"- **Página 7**: {table.shape[1]} columnas")
+                self._analyze_column_differences(df, i+1)
+            elif i == 7:  # Página 8
+                st.write(f"- **Página 8**: {table.shape[1]} columnas")
+                self._analyze_column_differences(df, i+1)
+            
             df = table.df
             
             # NUEVO: Filtrar y validar filas FL con criterios más estrictos
@@ -1409,6 +1431,30 @@ class TablillasExtractorPro:
         except Exception as e:
             st.warning(f"⚠️ Error expandiendo columnas: {str(e)}")
             return df
+    
+    def _analyze_column_differences(self, df: pd.DataFrame, page_num: int):
+        """Analizar diferencias en la estructura de columnas entre páginas"""
+        try:
+            if hasattr(self, '_reference_columns') and self._reference_columns:
+                current_columns = list(df.columns)
+                ref_columns = self._reference_columns
+                
+                # Mostrar diferencias
+                if len(current_columns) != len(ref_columns):
+                    st.write(f"  📊 **Página {page_num}**: {len(current_columns)} columnas vs {len(ref_columns)} de referencia")
+                    
+                    # Mostrar primeras columnas para comparar
+                    st.write(f"  🔍 **Primeras 5 columnas de Página {page_num}:**")
+                    for j, col in enumerate(current_columns[:5]):
+                        st.write(f"    {j+1}. {col}")
+                    
+                    if len(current_columns) < len(ref_columns):
+                        st.write(f"  ⚠️ **Página {page_num} tiene {len(ref_columns) - len(current_columns)} columnas menos**")
+                    else:
+                        st.write(f"  ℹ️ **Página {page_num} tiene {len(current_columns) - len(ref_columns)} columnas más**")
+                        
+        except Exception as e:
+            st.warning(f"⚠️ Error analizando diferencias de columnas: {str(e)}")
     
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza y estandarización avanzada"""
