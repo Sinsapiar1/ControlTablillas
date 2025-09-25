@@ -1573,6 +1573,282 @@ class TablillasExtractorPro:
         except Exception as e:
             st.warning(f"Error en validación: {e}")
     
+    def _process_single_row_page(self, df: pd.DataFrame, page_num: int):
+        """Procesa páginas con una sola fila de datos usando parsing manual - DEL EXTRACTOR PRO"""
+        processed_rows = []
+        
+        try:
+            # Obtener todo el texto de la página
+            full_text = ""
+            for row in df.values:
+                for cell in row:
+                    if pd.notna(cell):
+                        full_text += str(cell) + " "
+            
+            full_text = full_text.strip()
+            st.write(f"🔍 Texto completo encontrado: {full_text[:100]}...")
+            
+            # Verificar si contiene datos válidos
+            if '729000018' in full_text and 'FL' in full_text:
+                # Parsear manualmente la fila
+                parsed_row = self._parse_single_row_manually(full_text)
+                
+                if parsed_row is not None:
+                    processed_rows.append(parsed_row)
+                    st.success(f"✅ Fila parseada manualmente en página {page_num}")
+                else:
+                    st.warning(f"⚠️ No se pudo parsear la fila en página {page_num}")
+            
+        except Exception as e:
+            st.error(f"Error procesando fila única: {e}")
+        
+        return processed_rows
+    
+    def _parse_single_row_manually(self, text: str):
+        """Parsea manualmente una fila cuando Camelot falla - DEL EXTRACTOR PRO"""
+        try:
+            import re
+            
+            # Crear una fila fake de pandas con los datos distribuidos
+            # Buscar patrones específicos en el texto
+            
+            # 1. Return slip number
+            slip_match = re.search(r'(729000018\d{3})', text)
+            slip_num = slip_match.group(1) if slip_match else ''
+            
+            # 2. Fechas
+            dates = re.findall(r'(\d{1,2}/\d{1,2}/\d{4})', text)
+            
+            # 3. Jobsite y Cost center
+            jobsite_match = re.search(r'(4\d{7})', text)
+            jobsite = jobsite_match.group(1) if jobsite_match else ''
+            
+            cost_match = re.search(r'(FL\d{3})', text)
+            cost_center = cost_match.group(1) if cost_match else ''
+            
+            # 4. Customer name (buscar patrones conocidos)
+            customer = ''
+            customer_patterns = [
+                r'(Phorcys Builders Corp)',
+                r'(Laz Construction)', 
+                r'(Pedreiras Construction[^0-9]*)',
+                r'(JGR Construction)',
+                r'(Caribbean Building Corp)',
+                r'(Thales Builders Corp)'
+            ]
+            
+            for pattern in customer_patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    customer = match.group(1)
+                    break
+            
+            # 5. Job name (después del customer)
+            job_name = ''
+            if customer:
+                job_pattern = f"{re.escape(customer)}\\s+([^\\n]+?)\\s+(?:No|Yes)"
+                job_match = re.search(job_pattern, text, re.IGNORECASE)
+                if job_match:
+                    job_name = job_match.group(1).strip()
+            
+            # 6. Tablets y totales (buscar números y códigos)
+            tablets_match = re.search(r'(\d+,\s*\d+)', text)
+            tablets = tablets_match.group(1) if tablets_match else ''
+            
+            # Buscar códigos como 226M, 1499M
+            codes_match = re.search(r'(\d+M,?\s*\d+M)', text)
+            open_codes = codes_match.group(1) if codes_match else ''
+            
+            # Buscar números finales (delays)
+            final_numbers = re.findall(r'\b(\d{1,2})\b', text[-50:])  # Últimos 50 caracteres
+            
+            # Crear una fila estructurada manualmente
+            manual_row_data = [
+                'FL',                                    # 0: Wh
+                '61D',                                   # 1: Return prefix (por defecto)
+                slip_num,                                # 2: Return slip
+                dates[0] if dates else '',               # 3: Return date
+                jobsite,                                 # 4: Jobsite
+                cost_center,                             # 5: Cost center
+                dates[1] if len(dates) > 1 else '',      # 6: Invoice date 1
+                dates[2] if len(dates) > 2 else '',      # 7: Invoice date 2
+                customer,                                # 8: Customer
+                job_name,                                # 9: Job name
+                'No',                                    # 10: Definitive (por defecto)
+                '',                                      # 11: Counted date
+                tablets,                                 # 12: Tablets
+                final_numbers[-3] if len(final_numbers) >= 3 else '1',  # 13: Total
+                open_codes,                              # 14: Open
+                final_numbers[-2] if len(final_numbers) >= 2 else '1',  # 15: Tablets total
+                final_numbers[-1] if len(final_numbers) >= 1 else '0',  # 16: Counting delay
+                '0'                                      # 17: Validation delay
+            ]
+            
+            # Crear DataFrame de una sola fila
+            manual_df = pd.DataFrame([manual_row_data])
+            
+            st.write(f"📝 Fila manual creada: Slip={slip_num}, Customer={customer[:20]}, Tablets={tablets}")
+            
+            return manual_df
+            
+        except Exception as e:
+            st.error(f"Error en parsing manual: {e}")
+            return None
+    
+    def _show_extraction_summary_robust(self, df: pd.DataFrame):
+        """Mostrar resumen de extracción con validación robusta - DEL EXTRACTOR PRO"""
+        if df is None or df.empty:
+            st.warning("⚠️ No hay datos para mostrar en el resumen")
+            return
+        
+        try:
+            st.header("🔍 Validación Completa del Sistema")
+            
+            # 1. Conteos básicos
+            total_rows = len(df)
+            slip_count = 0
+            valid_slips = []
+            
+            import re
+            for idx in df.index:
+                row_text = ' '.join(str(cell) for cell in df.iloc[idx].values if pd.notna(cell))
+                if '729000018' in row_text:
+                    slip_match = re.search(r'(729000018\d{3})', row_text)
+                    if slip_match:
+                        slip_count += 1
+                        valid_slips.append(slip_match.group(1))
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📊 Filas Totales", total_rows)
+            with col2:
+                st.metric("📊 Slips Válidos", slip_count)
+            with col3:
+                completeness = (slip_count / total_rows * 100) if total_rows > 0 else 0
+                st.metric("📊 Completitud", f"{completeness:.1f}%")
+            
+            # 2. Validar secuencia de slips
+            if len(valid_slips) > 1:
+                first_slip = int(valid_slips[0][-3:])
+                last_slip = int(valid_slips[-1][-3:])
+                expected_count = last_slip - first_slip + 1
+                
+                if len(valid_slips) == expected_count:
+                    st.success(f"✅ Secuencia completa: {first_slip} a {last_slip} ({len(valid_slips)} slips)")
+                else:
+                    missing = expected_count - len(valid_slips)
+                    st.warning(f"⚠️ Secuencia incompleta: Faltan {missing} slips")
+            
+            # 3. Calcular totales con validación robusta
+            total_13, total_15, valid_totals = self._calculate_robust_totals(df)
+            
+            st.subheader("📊 Análisis de Totales")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Columna 13 (Total):** {total_13}")
+                st.write(f"**Filas con totales válidos:** {valid_totals['col_13']}/{total_rows}")
+            with col2:
+                st.write(f"**Columna 15 (Tablets Total):** {total_15}")
+                st.write(f"**Filas con tablets válidos:** {valid_totals['col_15']}/{total_rows}")
+            
+            # 4. Detectar totales del PDF automáticamente
+            pdf_totals = self._extract_pdf_totals_from_text(df)
+            if pdf_totals['found']:
+                st.subheader("🎯 Comparación con PDF")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    match_13 = total_13 == pdf_totals['total_13']
+                    icon_13 = "✅" if match_13 else "❌"
+                    st.write(f"{icon_13} **Total calculado:** {total_13}")
+                    st.write(f"**Total del PDF:** {pdf_totals['total_13']}")
+                    
+                with col2:
+                    match_15 = total_15 == pdf_totals['total_15']
+                    icon_15 = "✅" if match_15 else "❌"
+                    st.write(f"{icon_15} **Tablets calculado:** {total_15}")
+                    st.write(f"**Tablets del PDF:** {pdf_totals['total_15']}")
+                
+                # Resultado final
+                if match_13 and match_15:
+                    st.success("🎉 **EXTRACCIÓN PERFECTA** - Totales coinciden 100%")
+                else:
+                    st.error("❌ **EXTRACCIÓN INCOMPLETA** - Revisar datos faltantes")
+            
+            # Mostrar muestra de datos
+            st.subheader("👁️ Vista Previa de Datos")
+            st.dataframe(df.head(10))
+            
+        except Exception as e:
+            st.error(f"Error en validación robusta: {e}")
+    
+    def _calculate_robust_totals(self, df: pd.DataFrame):
+        """Calcula totales de manera robusta verificando múltiples columnas - DEL EXTRACTOR PRO"""
+        total_13 = 0
+        total_15 = 0
+        valid_counts = {'col_13': 0, 'col_15': 0}
+        
+        # Buscar totales en las columnas esperadas y alternativas
+        for idx in df.index:
+            # Para columna 13 (Total)
+            found_13 = False
+            for col_idx in [13, 12, 14]:  # Columnas probables
+                if col_idx < len(df.columns):
+                    val = str(df.iloc[idx, col_idx])
+                    if val.isdigit() and 1 <= int(val) <= 20:  # Rango típico
+                        total_13 += int(val)
+                        valid_counts['col_13'] += 1
+                        found_13 = True
+                        break
+            
+            # Para columna 15 (Tablets Total)  
+            found_15 = False
+            for col_idx in [15, 14, 16]:  # Columnas probables
+                if col_idx < len(df.columns):
+                    val = str(df.iloc[idx, col_idx])
+                    if val.isdigit() and 1 <= int(val) <= 20:  # Rango típico
+                        total_15 += int(val)
+                        valid_counts['col_15'] += 1
+                        found_15 = True
+                        break
+        
+        return total_13, total_15, valid_counts
+    
+    def _extract_pdf_totals_from_text(self, df: pd.DataFrame):
+        """Extrae los totales finales del PDF desde el propio DataFrame - DEL EXTRACTOR PRO"""
+        result = {'found': False, 'total_13': 0, 'total_15': 0}
+        
+        try:
+            import re
+            
+            # Buscar en las últimas filas números que podrían ser totales
+            last_rows_text = ""
+            for idx in df.tail(5).index:  # Últimas 5 filas
+                row_text = ' '.join(str(cell) for cell in df.iloc[idx].values if pd.notna(cell))
+                last_rows_text += row_text + " "
+            
+            # Buscar patrón de totales (dos números grandes al final)
+            # Patrón: número de 2-3 dígitos seguido de otro número de 2-3 dígitos
+            total_pattern = r'\b(\d{2,3})\s+(\d{2,3})\b'
+            matches = re.findall(total_pattern, last_rows_text)
+            
+            if matches:
+                # Tomar el último match como los totales finales
+                last_match = matches[-1]
+                total_13 = int(last_match[0])
+                total_15 = int(last_match[1])
+                
+                # Validar que sean números razonables (no fechas, etc.)
+                if 50 <= total_13 <= 500 and 20 <= total_15 <= 200:
+                    result['found'] = True
+                    result['total_13'] = total_13
+                    result['total_15'] = total_15
+            
+        except Exception as e:
+            st.warning(f"No se pudieron extraer totales del PDF: {e}")
+        
+        return result
+    
     def _clean_and_standardize_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpieza y estandarización avanzada"""
         try:
