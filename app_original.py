@@ -513,9 +513,9 @@ class TablillasExtractorPro:
         all_tables = []
         successful_methods = []
         
-        # MÉTODO 1: Stream Agresivo (del extractor pro)
+        # MÉTODO ÚNICO OPTIMIZADO: Stream Agresivo (el que mejor funciona)
         try:
-            st.info("🔄 Probando método Stream Agresivo...")
+            st.info("🔄 Extrayendo con método optimizado...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
@@ -528,136 +528,31 @@ class TablillasExtractorPro:
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Agresivo")
-                st.success(f"✅ Stream Agresivo: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Optimizado")
+                st.success(f"✅ Extracción exitosa: {len(tables)} tablas encontradas")
+                return all_tables, successful_methods
             else:
-                st.warning("⚠️ Stream Agresivo: No se encontraron tablas")
+                st.warning("⚠️ No se encontraron tablas con método principal")
         except Exception as e:
-            st.warning(f"⚠️ Error en Stream Agresivo: {str(e)}")
+            st.warning(f"⚠️ Error en método principal: {str(e)}")
         
-        # MÉTODO 2: Stream Estándar (del extractor pro)
+        # FALLBACK: Solo si el método principal falla completamente
         try:
-            st.info("🔄 Probando método Stream Estándar...")
+            st.info("🔄 Probando método de respaldo...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
                 flavor='stream'
             )
             if len(tables) > 0:
-                for table in tables:
-                    if not self._is_duplicate_table(table, all_tables):
-                        all_tables.append(table)
-                successful_methods.append("Stream Estándar")
-                st.success(f"✅ Stream Estándar: {len(tables)} tablas encontradas")
+                all_tables.extend(tables)
+                successful_methods.append("Stream Básico")
+                st.success(f"✅ Método de respaldo exitoso: {len(tables)} tablas encontradas")
+                return all_tables, successful_methods
             else:
-                st.warning("⚠️ Stream Estándar: No se encontraron tablas")
+                st.warning("⚠️ Método de respaldo no encontró tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en Stream Estándar: {str(e)}")
-        
-        # MÉTODO 3: Stream Ajustado (del extractor pro)
-        try:
-            st.info("🔄 Probando método Stream Ajustado...")
-            tables = camelot.read_pdf(
-                tmp_file_path, 
-                pages='all', 
-                flavor='stream',
-                edge_tol=200,
-                row_tol=5,
-                column_tol=3
-            )
-            if len(tables) > 0:
-                for table in tables:
-                    if not self._is_duplicate_table(table, all_tables):
-                        all_tables.append(table)
-                successful_methods.append("Stream Ajustado")
-                st.success(f"✅ Stream Ajustado: {len(tables)} tablas encontradas")
-            else:
-                st.warning("⚠️ Stream Ajustado: No se encontraron tablas")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Stream Ajustado: {str(e)}")
-        
-        # MÉTODO 4: Lattice Estándar (del extractor pro)
-        try:
-            st.info("🔄 Probando método Lattice Estándar...")
-            tables = camelot.read_pdf(
-                tmp_file_path, 
-                pages='all', 
-                flavor='lattice',
-                process_background=True
-            )
-            if len(tables) > 0:
-                for table in tables:
-                    if not self._is_duplicate_table(table, all_tables):
-                        all_tables.append(table)
-                successful_methods.append("Lattice Estándar")
-                st.success(f"✅ Lattice Estándar: {len(tables)} tablas encontradas")
-            else:
-                st.warning("⚠️ Lattice Estándar: No se encontraron tablas")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Lattice Estándar: {str(e)}")
-        
-        # MÉTODO 5: Lattice Detallado (del extractor pro)
-        try:
-            st.info("🔄 Probando método Lattice Detallado...")
-            tables = camelot.read_pdf(
-                tmp_file_path, 
-                pages='all', 
-                flavor='lattice',
-                process_background=True,
-                line_scale=40,
-                iterations=2
-            )
-            if len(tables) > 0:
-                for table in tables:
-                    if not self._is_duplicate_table(table, all_tables):
-                        all_tables.append(table)
-                successful_methods.append("Lattice Detallado")
-                st.success(f"✅ Lattice Detallado: {len(tables)} tablas encontradas")
-            else:
-                st.warning("⚠️ Lattice Detallado: No se encontraron tablas")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Lattice Detallado: {str(e)}")
-        
-        # MÉTODO 6: Híbrido (del extractor pro)
-        try:
-            st.info("🔄 Probando método Híbrido...")
-            hybrid_tables = []
-            
-            # Stream del híbrido
-            try:
-                stream_tables = camelot.read_pdf(
-                    tmp_file_path,
-                    pages='all',
-                    flavor='stream',
-                    edge_tol=500
-                )
-                if stream_tables:
-                    hybrid_tables.extend(stream_tables)
-            except:
-                pass
-            
-            # Lattice del híbrido
-            try:
-                lattice_tables = camelot.read_pdf(
-                    tmp_file_path,
-                    pages='all',
-                    flavor='lattice'
-                )
-                if lattice_tables:
-                    hybrid_tables.extend(lattice_tables)
-            except:
-                pass
-            
-            if len(hybrid_tables) > 0:
-                for table in hybrid_tables:
-                    if not self._is_duplicate_table(table, all_tables):
-                        all_tables.append(table)
-                successful_methods.append("Híbrido")
-                st.success(f"✅ Híbrido: {len(hybrid_tables)} tablas encontradas")
-            else:
-                st.warning("⚠️ Híbrido: No se encontraron tablas")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Híbrido: {str(e)}")
+            st.warning(f"⚠️ Error en método de respaldo: {str(e)}")
         
         return all_tables, successful_methods
     
@@ -2222,12 +2117,12 @@ def show_pdf_processing_tab():
         
         # Información sobre tiempo de procesamiento
         st.info("""
-        ⏱️ **Tiempo de procesamiento esperado:**
-        - 📄 PDF pequeño (< 1MB): 30-60 segundos
-        - 📄 PDF mediano (1-5MB): 1-3 minutos  
-        - 📄 PDF grande (> 5MB): 3-5 minutos
+        ⏱️ **Tiempo de procesamiento optimizado:**
+        - 📄 PDF pequeño (< 1MB): 15-30 segundos
+        - 📄 PDF mediano (1-5MB): 30-60 segundos  
+        - 📄 PDF grande (> 5MB): 1-2 minutos
         
-        💡 **Consejo:** Si se demora mucho, puedes cancelar y probar con un PDF más pequeño.
+        🚀 **Optimizado para Render** con método único efectivo
         """)
         
         # Extraer datos
