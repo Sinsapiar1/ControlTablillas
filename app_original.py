@@ -513,9 +513,55 @@ class TablillasExtractorPro:
         all_tables = []
         successful_methods = []
         
-        # MÉTODO ÚNICO OPTIMIZADO: Stream Agresivo (el que mejor funciona)
+        # MÉTODO 1: Lattice Conservador (mejor para PDFs bien estructurados)
         try:
-            st.info("🔄 Extrayendo con método optimizado...")
+            st.info("🔄 Probando método Lattice Conservador...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='lattice',
+                process_background=True,
+                line_scale=40
+            )
+            if len(tables) > 0:
+                # Validar calidad del resultado
+                quality_score = self._evaluate_extraction_quality(tables)
+                if quality_score >= 0.7:  # Si es de buena calidad, usarlo
+                    all_tables.extend(tables)
+                    successful_methods.append("Lattice Conservador")
+                    st.success(f"✅ Lattice Conservador: {len(tables)} tablas (calidad: {quality_score:.2f})")
+                    return all_tables, successful_methods
+                else:
+                    st.warning(f"⚠️ Lattice Conservador: {len(tables)} tablas pero calidad baja ({quality_score:.2f})")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Lattice Conservador: {str(e)}")
+        
+        # MÉTODO 2: Stream Balanceado (parámetros más equilibrados)
+        try:
+            st.info("🔄 Probando método Stream Balanceado...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='stream',
+                edge_tol=350,  # Más conservador que 500
+                row_tol=12,    # Más tolerante que 10
+                column_tol=5   # Más flexible que 0
+            )
+            if len(tables) > 0:
+                quality_score = self._evaluate_extraction_quality(tables)
+                if quality_score >= 0.6:  # Aceptar si es decente
+                    all_tables.extend(tables)
+                    successful_methods.append("Stream Balanceado")
+                    st.success(f"✅ Stream Balanceado: {len(tables)} tablas (calidad: {quality_score:.2f})")
+                    return all_tables, successful_methods
+                else:
+                    st.warning(f"⚠️ Stream Balanceado: {len(tables)} tablas pero calidad baja ({quality_score:.2f})")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Stream Balanceado: {str(e)}")
+        
+        # MÉTODO 3: Stream Agresivo (fallback para casos difíciles)
+        try:
+            st.info("🔄 Probando método Stream Agresivo...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
@@ -528,17 +574,17 @@ class TablillasExtractorPro:
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Optimizado")
-                st.success(f"✅ Extracción exitosa: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Agresivo")
+                st.success(f"✅ Stream Agresivo: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ No se encontraron tablas con método principal")
+                st.warning("⚠️ Stream Agresivo: No se encontraron tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en método principal: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Agresivo: {str(e)}")
         
-        # FALLBACK: Solo si el método principal falla completamente
+        # MÉTODO 4: Stream Básico (último recurso)
         try:
-            st.info("🔄 Probando método de respaldo...")
+            st.info("🔄 Probando método Stream Básico...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
@@ -547,14 +593,88 @@ class TablillasExtractorPro:
             if len(tables) > 0:
                 all_tables.extend(tables)
                 successful_methods.append("Stream Básico")
-                st.success(f"✅ Método de respaldo exitoso: {len(tables)} tablas encontradas")
+                st.success(f"✅ Stream Básico: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ Método de respaldo no encontró tablas")
+                st.warning("⚠️ Stream Básico: No se encontraron tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en método de respaldo: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Básico: {str(e)}")
         
         return all_tables, successful_methods
+    
+    def _evaluate_extraction_quality(self, tables) -> float:
+        """Evalúa la calidad de la extracción - ADAPTADO DEL CÓDIGO DE CLAUDE"""
+        try:
+            if not tables:
+                return 0.0
+            
+            total_score = 0.0
+            total_tables = len(tables)
+            
+            for table in tables:
+                try:
+                    df = table.df
+                    if df is None or df.empty:
+                        continue
+                    
+                    # Score basado en estructura
+                    score = 0.0
+                    
+                    # 1. Verificar columnas (18 es ideal)
+                    col_count = len(df.columns)
+                    if col_count >= 15:
+                        score += 0.3  # Estructura buena
+                    elif col_count >= 10:
+                        score += 0.2  # Estructura aceptable
+                    else:
+                        score += 0.1  # Estructura básica
+                    
+                    # 2. Verificar filas con datos válidos
+                    valid_rows = 0
+                    total_rows = len(df)
+                    
+                    for idx in df.index:
+                        row_text = ' '.join(str(cell) for cell in df.iloc[idx].values if pd.notna(cell))
+                        if '729000018' in row_text and 'FL' in row_text:
+                            # Evitar headers
+                            if not any(skip in row_text for skip in ['Outstanding count', 'Page', 'Return packing', 'Customer name', 'Alsina Forms']):
+                                valid_rows += 1
+                    
+                    if total_rows > 0:
+                        valid_ratio = valid_rows / total_rows
+                        score += valid_ratio * 0.4  # Hasta 0.4 puntos por filas válidas
+                    
+                    # 3. Verificar secuencia de slips
+                    slip_numbers = []
+                    for idx in df.index:
+                        row_text = ' '.join(str(cell) for cell in df.iloc[idx].values if pd.notna(cell))
+                        slip_match = re.search(r'(729000018\d{3})', row_text)
+                        if slip_match:
+                            slip_numbers.append(int(slip_match.group(1)[-3:]))
+                    
+                    if len(slip_numbers) > 1:
+                        slip_numbers.sort()
+                        first_slip = slip_numbers[0]
+                        last_slip = slip_numbers[-1]
+                        expected_count = last_slip - first_slip + 1
+                        actual_count = len(slip_numbers)
+                        
+                        if actual_count == expected_count:
+                            score += 0.3  # Secuencia perfecta
+                        elif actual_count >= expected_count * 0.8:
+                            score += 0.2  # Secuencia buena
+                        else:
+                            score += 0.1  # Secuencia parcial
+                    
+                    total_score += min(score, 1.0)  # Cap en 1.0 por tabla
+                    
+                except Exception as e:
+                    continue
+            
+            return total_score / total_tables if total_tables > 0 else 0.0
+            
+        except Exception as e:
+            return 0.0
     
     def _get_page_specific_config(self, page_num: int) -> Dict:
         """Obtener configuración específica para cada página"""
@@ -2117,12 +2237,12 @@ def show_pdf_processing_tab():
         
         # Información sobre tiempo de procesamiento
         st.info("""
-        ⏱️ **Tiempo de procesamiento optimizado:**
-        - 📄 PDF pequeño (< 1MB): 15-30 segundos
-        - 📄 PDF mediano (1-5MB): 30-60 segundos  
-        - 📄 PDF grande (> 5MB): 1-2 minutos
+        ⏱️ **Tiempo de procesamiento adaptativo:**
+        - 📄 PDF pequeño (< 1MB): 20-40 segundos
+        - 📄 PDF mediano (1-5MB): 40-90 segundos  
+        - 📄 PDF grande (> 5MB): 1-3 minutos
         
-        🚀 **Optimizado para Render** con método único efectivo
+        🧠 **Método inteligente** que evalúa calidad y selecciona el mejor resultado
         """)
         
         # Extraer datos
