@@ -509,34 +509,54 @@ class TablillasExtractorPro:
             return None
     
     def _extract_with_multiple_methods(self, tmp_file_path: str) -> Tuple[List, List[str]]:
-        """Extraer con método rápido y efectivo - SOLUCIÓN INMEDIATA"""
+        """Extraer con métodos adaptativos - ADAPTADO DE APP LOCAL"""
         all_tables = []
         successful_methods = []
         
-        # MÉTODO PRINCIPAL: Stream Balanceado (parámetros optimizados)
+        # MÉTODO 1: Lattice Conservador (mejor para PDFs bien estructurados)
         try:
-            st.info("🔄 Extrayendo con método optimizado...")
+            st.info("🔄 Probando método Lattice Conservador...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='lattice',
+                process_background=True,
+                line_scale=40
+            )
+            if len(tables) > 0:
+                all_tables.extend(tables)
+                successful_methods.append("Lattice Conservador")
+                st.success(f"✅ Lattice Conservador: {len(tables)} tablas encontradas")
+                return all_tables, successful_methods
+            else:
+                st.warning("⚠️ Lattice Conservador: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Lattice Conservador: {str(e)}")
+        
+        # MÉTODO 2: Stream Balanceado (parámetros equilibrados)
+        try:
+            st.info("🔄 Probando método Stream Balanceado...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
                 flavor='stream',
-                edge_tol=350,  # Balanceado
-                row_tol=12,    # Tolerante
-                column_tol=5   # Flexible
+                edge_tol=350,
+                row_tol=12,
+                column_tol=5
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Optimizado")
-                st.success(f"✅ Extracción exitosa: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Balanceado")
+                st.success(f"✅ Stream Balanceado: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ No se encontraron tablas con método principal")
+                st.warning("⚠️ Stream Balanceado: No se encontraron tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en método principal: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Balanceado: {str(e)}")
         
-        # FALLBACK: Stream Básico (solo si el principal falla)
+        # MÉTODO 3: Stream Estándar (el que funciona consistentemente)
         try:
-            st.info("🔄 Probando método de respaldo...")
+            st.info("🔄 Probando método Stream Estándar...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
@@ -544,15 +564,107 @@ class TablillasExtractorPro:
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Básico")
-                st.success(f"✅ Método de respaldo exitoso: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Estándar")
+                st.success(f"✅ Stream Estándar: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ Método de respaldo no encontró tablas")
+                st.warning("⚠️ Stream Estándar: No se encontraron tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en método de respaldo: {str(e)}")
+            st.warning(f"⚠️ Error en Stream Estándar: {str(e)}")
+        
+        # MÉTODO 4: Stream Agresivo (fallback)
+        try:
+            st.info("🔄 Probando método Stream Agresivo...")
+            tables = camelot.read_pdf(
+                tmp_file_path, 
+                pages='all', 
+                flavor='stream',
+                edge_tol=500,
+                row_tol=10,
+                column_tol=0,
+                split_text=True,
+                flag_size=True
+            )
+            if len(tables) > 0:
+                all_tables.extend(tables)
+                successful_methods.append("Stream Agresivo")
+                st.success(f"✅ Stream Agresivo: {len(tables)} tablas encontradas")
+                return all_tables, successful_methods
+            else:
+                st.warning("⚠️ Stream Agresivo: No se encontraron tablas")
+        except Exception as e:
+            st.warning(f"⚠️ Error en Stream Agresivo: {str(e)}")
         
         return all_tables, successful_methods
+    
+    def _separate_merged_row(self, merged_text: str) -> Optional[pd.DataFrame]:
+        """Separa una fila que está toda junta en una sola celda - DE APP LOCAL"""
+        try:
+            import re
+            # Buscar patrones específicos para separar
+            parts = []
+            
+            # 1. FL
+            parts.append('FL')
+            
+            # 2. Warehouse code (612D, 61D, 28D, 252D, etc.) - MEJORADO
+            wh_match = re.search(r'(\d+[dD])', merged_text, re.IGNORECASE)
+            if wh_match:
+                wh_code = wh_match.group(1).upper()  # Normalizar a mayúsculas
+                parts.append(wh_code)
+            else:
+                parts.append('612D')  # Default
+            
+            # 3. Slip number
+            slip_match = re.search(r'(729000018\d{3})', merged_text)
+            parts.append(slip_match.group(1) if slip_match else '')
+            
+            # 4. Fechas
+            dates = re.findall(r'(\d{1,2}/\d{1,2}/\d{4})', merged_text)
+            parts.extend(dates[:4])  # Primeras 4 fechas
+            while len(parts) < 7:  # Asegurar al menos 7 elementos
+                parts.append('')
+            
+            # 5. Jobsite (8 dígitos empezando con 4)
+            jobsite_match = re.search(r'(4\d{7})', merged_text)
+            if jobsite_match:
+                parts.append(jobsite_match.group(1))
+            else:
+                parts.append('')
+            
+            # 6. Cost Center (FLXXX)
+            cost_center_match = re.search(r'(FL\d{3})', merged_text)
+            if cost_center_match:
+                parts.append(cost_center_match.group(1))
+            else:
+                parts.append('')
+            
+            # 7. Customer name (texto entre fechas y números)
+            customer_match = re.search(r'([A-Za-z\s&,\.]+(?:Corp|Inc|LLC|Ltd|Co))', merged_text)
+            if customer_match:
+                parts.append(customer_match.group(1).strip())
+            else:
+                parts.append('')
+            
+            # 8. Job name (después del customer)
+            remaining = merged_text
+            for part in parts:
+                if part:
+                    remaining = remaining.replace(str(part), '', 1)
+            
+            # Separar por patrones comunes
+            remaining_parts = remaining.split()[:10]  # Máximo 10 partes más
+            parts.extend(remaining_parts)
+            
+            # Asegurar 18 columnas
+            while len(parts) < 18:
+                parts.append('')
+            
+            return pd.DataFrame([parts[:18]])
+            
+        except Exception as e:
+            st.warning(f"Error separando fila concatenada: {e}")
+            return None
     
     def _evaluate_extraction_quality(self, tables) -> float:
         """Evalúa la calidad de la extracción - ADAPTADO DEL CÓDIGO DE CLAUDE"""
@@ -800,7 +912,7 @@ class TablillasExtractorPro:
         return False
     
     def _filter_valid_fl_rows(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Filtrar filas FL válidas con criterios estrictos para evitar datos incompletos"""
+        """Filtrar filas FL válidas con separación de filas concatenadas y normalización - MEJORADO"""
         try:
             if df.empty:
                 return df
@@ -810,18 +922,45 @@ class TablillasExtractorPro:
             for idx in df.index:
                 first_col = str(df.iloc[idx, 0]).strip()
                 
+                # NUEVO: Verificar si toda la fila está concatenada en una sola celda
+                if len(first_col) > 100 and '729000018' in first_col and 'FL' in first_col:
+                    st.warning(f"⚠️ Fila concatenada detectada, separando...")
+                    separated_row = self._separate_merged_row(first_col)
+                    if separated_row is not None:
+                        # Agregar la fila separada como una nueva fila válida
+                        valid_rows.append(separated_row)
+                        st.success(f"✅ Fila concatenada separada exitosamente")
+                    continue
+                
                 # Verificar si la fila empieza con FL
                 if not first_col.startswith('FL'):
                     continue
                 
                 # NUEVO: Validar que la fila tenga datos suficientes
                 if self._is_valid_fl_row(df.iloc[idx]):
-                    valid_rows.append(idx)
+                    # NUEVO: Normalizar warehouse codes antes de agregar
+                    row_data = df.iloc[idx:idx+1].copy()
+                    
+                    # Normalizar warehouse en columna 1 (índice 1) - buscar 612d y convertir a 612D
+                    if len(row_data.columns) > 1:
+                        wh_cell = str(row_data.iloc[0, 1])
+                        # Buscar cualquier patrón de warehouse code y normalizar
+                        wh_match = re.search(r'(\d+[dD])', wh_cell, re.IGNORECASE)
+                        if wh_match:
+                            normalized_wh = wh_match.group(1).upper()
+                            wh_cell = wh_cell.replace(wh_match.group(1), normalized_wh)
+                            row_data.iloc[0, 1] = wh_cell
+                    
+                    valid_rows.append(row_data)
                 else:
                     st.write(f"⚠️ Fila FL incompleta descartada: {first_col}")
             
             if valid_rows:
-                return df.loc[valid_rows].reset_index(drop=True)
+                # Si tenemos filas separadas (DataFrames), concatenarlas
+                if isinstance(valid_rows[0], pd.DataFrame):
+                    return pd.concat(valid_rows, ignore_index=True)
+                else:
+                    return df.loc[valid_rows].reset_index(drop=True)
             else:
                 return pd.DataFrame()
                 
@@ -2189,12 +2328,12 @@ def show_pdf_processing_tab():
         
         # Información sobre tiempo de procesamiento
         st.info("""
-        ⏱️ **Tiempo de procesamiento optimizado:**
-        - 📄 PDF pequeño (< 1MB): 15-30 segundos
-        - 📄 PDF mediano (1-5MB): 30-60 segundos  
-        - 📄 PDF grande (> 5MB): 1-2 minutos
+        ⏱️ **Tiempo de procesamiento adaptativo:**
+        - 📄 PDF pequeño (< 1MB): 30-60 segundos
+        - 📄 PDF mediano (1-5MB): 1-2 minutos  
+        - 📄 PDF grande (> 5MB): 2-4 minutos
         
-        ⚡ **Método rápido** con parámetros balanceados para máxima compatibilidad
+        🧠 **Método inteligente** que prueba múltiples estrategias y separa filas concatenadas
         """)
         
         # Extraer datos
