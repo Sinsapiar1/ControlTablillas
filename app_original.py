@@ -509,82 +509,34 @@ class TablillasExtractorPro:
             return None
     
     def _extract_with_multiple_methods(self, tmp_file_path: str) -> Tuple[List, List[str]]:
-        """Extraer con múltiples métodos Camelot optimizados"""
+        """Extraer con método rápido y efectivo - SOLUCIÓN INMEDIATA"""
         all_tables = []
         successful_methods = []
         
-        # MÉTODO 1: Lattice Conservador (mejor para PDFs bien estructurados)
+        # MÉTODO PRINCIPAL: Stream Balanceado (parámetros optimizados)
         try:
-            st.info("🔄 Probando método Lattice Conservador...")
-            tables = camelot.read_pdf(
-                tmp_file_path, 
-                pages='all', 
-                flavor='lattice',
-                process_background=True,
-                line_scale=40
-            )
-            if len(tables) > 0:
-                # Validar calidad del resultado
-                quality_score = self._evaluate_extraction_quality(tables)
-                if quality_score >= 0.7:  # Si es de buena calidad, usarlo
-                    all_tables.extend(tables)
-                    successful_methods.append("Lattice Conservador")
-                    st.success(f"✅ Lattice Conservador: {len(tables)} tablas (calidad: {quality_score:.2f})")
-                    return all_tables, successful_methods
-                else:
-                    st.warning(f"⚠️ Lattice Conservador: {len(tables)} tablas pero calidad baja ({quality_score:.2f})")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Lattice Conservador: {str(e)}")
-        
-        # MÉTODO 2: Stream Balanceado (parámetros más equilibrados)
-        try:
-            st.info("🔄 Probando método Stream Balanceado...")
+            st.info("🔄 Extrayendo con método optimizado...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
                 flavor='stream',
-                edge_tol=350,  # Más conservador que 500
-                row_tol=12,    # Más tolerante que 10
-                column_tol=5   # Más flexible que 0
-            )
-            if len(tables) > 0:
-                quality_score = self._evaluate_extraction_quality(tables)
-                if quality_score >= 0.6:  # Aceptar si es decente
-                    all_tables.extend(tables)
-                    successful_methods.append("Stream Balanceado")
-                    st.success(f"✅ Stream Balanceado: {len(tables)} tablas (calidad: {quality_score:.2f})")
-                    return all_tables, successful_methods
-                else:
-                    st.warning(f"⚠️ Stream Balanceado: {len(tables)} tablas pero calidad baja ({quality_score:.2f})")
-        except Exception as e:
-            st.warning(f"⚠️ Error en Stream Balanceado: {str(e)}")
-        
-        # MÉTODO 3: Stream Agresivo (fallback para casos difíciles)
-        try:
-            st.info("🔄 Probando método Stream Agresivo...")
-            tables = camelot.read_pdf(
-                tmp_file_path, 
-                pages='all', 
-                flavor='stream',
-                edge_tol=500,
-                row_tol=10,
-                column_tol=0,
-                split_text=True,
-                flag_size=True
+                edge_tol=350,  # Balanceado
+                row_tol=12,    # Tolerante
+                column_tol=5   # Flexible
             )
             if len(tables) > 0:
                 all_tables.extend(tables)
-                successful_methods.append("Stream Agresivo")
-                st.success(f"✅ Stream Agresivo: {len(tables)} tablas encontradas")
+                successful_methods.append("Stream Optimizado")
+                st.success(f"✅ Extracción exitosa: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ Stream Agresivo: No se encontraron tablas")
+                st.warning("⚠️ No se encontraron tablas con método principal")
         except Exception as e:
-            st.warning(f"⚠️ Error en Stream Agresivo: {str(e)}")
+            st.warning(f"⚠️ Error en método principal: {str(e)}")
         
-        # MÉTODO 4: Stream Básico (último recurso)
+        # FALLBACK: Stream Básico (solo si el principal falla)
         try:
-            st.info("🔄 Probando método Stream Básico...")
+            st.info("🔄 Probando método de respaldo...")
             tables = camelot.read_pdf(
                 tmp_file_path, 
                 pages='all', 
@@ -593,12 +545,12 @@ class TablillasExtractorPro:
             if len(tables) > 0:
                 all_tables.extend(tables)
                 successful_methods.append("Stream Básico")
-                st.success(f"✅ Stream Básico: {len(tables)} tablas encontradas")
+                st.success(f"✅ Método de respaldo exitoso: {len(tables)} tablas encontradas")
                 return all_tables, successful_methods
             else:
-                st.warning("⚠️ Stream Básico: No se encontraron tablas")
+                st.warning("⚠️ Método de respaldo no encontró tablas")
         except Exception as e:
-            st.warning(f"⚠️ Error en Stream Básico: {str(e)}")
+            st.warning(f"⚠️ Error en método de respaldo: {str(e)}")
         
         return all_tables, successful_methods
     
@@ -2237,12 +2189,12 @@ def show_pdf_processing_tab():
         
         # Información sobre tiempo de procesamiento
         st.info("""
-        ⏱️ **Tiempo de procesamiento adaptativo:**
-        - 📄 PDF pequeño (< 1MB): 20-40 segundos
-        - 📄 PDF mediano (1-5MB): 40-90 segundos  
-        - 📄 PDF grande (> 5MB): 1-3 minutos
+        ⏱️ **Tiempo de procesamiento optimizado:**
+        - 📄 PDF pequeño (< 1MB): 15-30 segundos
+        - 📄 PDF mediano (1-5MB): 30-60 segundos  
+        - 📄 PDF grande (> 5MB): 1-2 minutos
         
-        🧠 **Método inteligente** que evalúa calidad y selecciona el mejor resultado
+        ⚡ **Método rápido** con parámetros balanceados para máxima compatibilidad
         """)
         
         # Extraer datos
